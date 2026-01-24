@@ -1,0 +1,47 @@
+Note that compiling a totally empty sketch consumes,
+
+  (compile)
+
+  Sketch uses 270135 bytes (20%) of program storage space.
+  Maximum is 1310720 bytes.
+  Global variables use 20208 bytes (6%) of dynamic memory,
+  leaving 307472 bytes for local variables. Maximum is 327680 bytes.
+
+  (upload)
+
+  Configuring flash size...
+  Flash will be erased from 0x00000000 to 0x00004fff...
+  Flash will be erased from 0x00008000 to 0x00008fff...
+  Flash will be erased from 0x0000e000 to 0x0000ffff...
+  Flash will be erased from 0x00010000 to 0x00051fff...
+  Wrote 20224 bytes (13061 compressed) at 0x00000000 in 0.3 seconds (483.5 kbit/s).
+  Hash of data verified.
+  Wrote 3072 bytes (146 compressed) at 0x00008000 in 0.0 seconds (943.4 kbit/s).
+  Hash of data verified.
+  Wrote 8192 bytes (47 compressed) at 0x0000e000 in 0.0 seconds (1332.2 kbit/s).
+  Hash of data verified.
+  Wrote 270288 bytes (145781 compressed) at 0x00010000 in 2.3 seconds (926.0 kbit/s).
+  Hash of data verified.
+
+Once "WiFi" is added,
+
+  (compile)
+
+  Sketch uses 847183 bytes (64%) of program storage space.
+  Maximum is 1310720 bytes.
+  Global variables use 42780 bytes (13%) of dynamic memory,
+  leaving 284900 bytes for local variables. Maximum is 327680 bytes.
+
+  Flash will be erased from 0x00000000 to 0x00004fff...
+  Flash will be erased from 0x00008000 to 0x00008fff...
+  Flash will be erased from 0x0000e000 to 0x0000ffff...
+  Flash will be erased from 0x00010000 to 0x000defff...
+  Wrote 20224 bytes (13061 compressed) at 0x00000000 in 0.3 seconds (486.8 kbit/s).
+  Hash of data verified.
+  Wrote 3072 bytes (146 compressed) at 0x00008000 in 0.0 seconds (924.0 kbit/s).
+  Hash of data verified.
+  Wrote 8192 bytes (47 compressed) at 0x0000e000 in 0.0 seconds (1314.9 kbit/s).
+  Hash of data verified.
+  Wrote 847328 bytes (549378 compressed) at 0x00010000 in 8.6 seconds (792.5 kbit/s).
+  Hash of data verified.
+
