@@ -4,6 +4,8 @@ SERIAL_PORT="/dev/ttyACM0"
 
 case $1 in
 'compile')
+  shift 1
+  ARGS=$@
   TIME="`date "+%Y%m%d-%H%M%S"`"
   COMMIT="`git rev-parse --short HEAD`"
 
@@ -12,7 +14,7 @@ case $1 in
         compiler.cpp.extra_flags="
           -DBUILD_COMMIT=\"$COMMIT\" \
           -DBUILD_TIME=\"$TIME\"" \
-    .
+    $ARGS .
   ;;
 'upload')
   arduino-cli upload -p $SERIAL_PORT -b esp32:esp32:esp32s3 --verify .
