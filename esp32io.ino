@@ -12,6 +12,7 @@
 #define DEF_RGBLED_BLINK_MS 10          // how long LED stays on
 #define DEF_THREAD_STACKSIZE 2048       // stack size when thread is created
 #define DEF_CONSOLE_THREAD_PRIORITY 1   // thread scheduling priority
+#define DEF_WEBSERVER_THREAD_PRIORITY 2 // thread scheduling priority
 
 #define BUF_LEN_CONSOLE 256             // user command buffer on serial
 
@@ -30,6 +31,7 @@ void f_serial_console_thread(void *param)
   int buf_pos = 0 ;
   char *buf = NULL, c ;
 
+  delay(1000) ; // wait for setup() to complete
   buf = (char*) malloc(BUF_LEN_CONSOLE) ;
   while (1)
   {
@@ -95,19 +97,48 @@ void setup ()
   delay (1000) ;
   WiFi.mode(WIFI_STA) ;
   Serial.begin(DEF_SERIAL_BAUD) ;
+  Serial.setTimeout(LONG_MAX) ;
   Serial.printf("\r\nBOOT: Running esp32io git commit %s, built %s.\r\n",
                 BUILD_COMMIT, BUILD_TIME) ;
   Serial.printf("BOOT: Wifi mac: %s\r\n", WiFi.macAddress().c_str()) ;
   Serial.printf("BOOT: Chip temperature: %.2fC\r\n", temperatureRead()) ;
 
+  // if we have compile time wifi config, set it up now.
+
+  #if defined(WIFI_SSID) && defined(WIFI_PW)
+    Serial.printf("BOOT: Connecting to %s.", WIFI_SSID) ;
+    WiFi.begin(WIFI_SSID, WIFI_PW) ;
+    for (int retry=0 ; retry < 30 ; retry++)
+    {
+      if (WiFi.status() == WL_CONNECTED)
+        break ;
+      Serial.printf(".") ;
+      delay(1000) ;
+    }
+    Serial.printf("\r\nBOOT: IP: %d.%d.%d.%d\r\n",
+                  WiFi.localIP()[0], WiFi.localIP()[1],
+                  WiFi.localIP()[2], WiFi.localIP()[3]) ;
+  #endif
+
   // start the "f_serial_console_thread"
 
   xTaskCreatePinnedToCore (
     f_serial_console_thread,            // function to run
-    "serial_console_thread",            // name for debugging
+    "thr_console",                      // name which shows up in crash dumps
     DEF_THREAD_STACKSIZE,               // stack size
     NULL,                               // param to pass
     DEF_CONSOLE_THREAD_PRIORITY,        // priority (higher is more important)
+    NULL,                               // task handle
+    0) ;                                // core ID
+
+  // start the "f_webserver_thread"
+
+  xTaskCreatePinnedToCore (
+    f_webserver_thread,                 // function to run
+    "thr_webserver",                    // name which shows up in crash dumps
+    DEF_THREAD_STACKSIZE,               // stack size
+    NULL,                               // param to pass
+    DEF_WEBSERVER_THREAD_PRIORITY,      // priority (higher is more important)
     NULL,                               // task handle
     0) ;                                // core ID
 
