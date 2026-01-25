@@ -5,6 +5,8 @@ void f_webserver_thread (void *param)
   struct timeval tv ;
   struct sockaddr_in listen_saddr, event_saddr ;
 
+  // initialize
+
   // setup the UDP socket which listens for work thread events.
 
   int event_sd = socket(AF_INET, SOCK_DGRAM, 0) ;

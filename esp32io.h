@@ -1,7 +1,27 @@
 #include <lwip/netdb.h>
 
+/* This structure tracks a single (connected) HTTP client */
+
+struct web_client
+{
+  int sd ;                              // "-1" when not connected
+  unsigned long ts_last_activity ;      // millis() of last activity
+  int buf_pos ;                         // current insertion point
+  char buf[BUF_LEN_WEBCLIENT] ;         // buffer for webclient http header
+} ; typedef struct web_client S_WebClient ;
+
 /* This structure holds all global and shared runtime info */
 
 struct runtime_data {
 
+  // serial console data structures
+
+  int serial_buf_pos ;
+  char serial_buf[BUF_LEN_CONSOLE] ;
+
+
+  // web server data structures
+
+  S_WebClient webclients[DEF_WEBSERVER_MAX_CLIENTS] ;
 } ; typedef struct runtime_data S_RuntimeData ;
+

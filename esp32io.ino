@@ -23,6 +23,13 @@
    UDP server socket which binds to loopback. This socket descriptor is also
    monitored in the webserver thread's "select()". The worker thread then sends
    a UDP packet to signal the web server thread that a result is ready.
+
+   INTERNAL DATA STRUCTURES
+
+   One thing we want to avoid is calling "malloc()" many times, resulting in
+   memory fragmentation. Instead, if we pack all known fixed length buffers
+   into a single struct, then we can call 1x "malloc()" at boot and use a
+   single contiguous block of memory. This is the motivation of "G_runtime".
 */
 
 #define DEF_SERIAL_BAUD	115200          // serial port (over USB)
@@ -32,8 +39,10 @@
 #define DEF_CONSOLE_THREAD_PRIORITY 1   // thread scheduling priority
 #define DEF_WEBSERVER_THREAD_PRIORITY 2 // thread scheduling priority
 #define DEF_WEBSERVER_EVENT_PORT 65501  // UDP mesg indicating task completion
+#define DEF_WEBSERVER_MAX_CLIENTS 8     // maximum concurrent HTTP clients
 
 #define BUF_LEN_CONSOLE 256             // user command buffer on serial
+#define BUF_LEN_WEBCLIENT 256           // buffer for webclient HTTP header
 
 #include <WiFi.h>
 
@@ -41,47 +50,45 @@
 
 // Global Variables
 
-S_RuntimeData G_runtime ;
+S_RuntimeData *G_runtime=NULL ;
 
 // ============================================================================
 
 void f_serial_console_thread(void *param)
 {
-  int buf_pos = 0 ;
-  char *buf = NULL, c ;
-
   delay(1000) ; // wait for setup() to complete
-  buf = (char*) malloc(BUF_LEN_CONSOLE) ;
   while (1)
   {
     // sit here and loop until we read a full command
 
-    buf_pos = 0 ;
-    buf[0] = 0 ;
+    G_runtime->serial_buf_pos = 0 ;
+    G_runtime->serial_buf[0] = 0 ;
     Serial.printf("> ") ;
+
     while (1)
     {
-      c = 0 ;                           // in case readBytes() times out
+      char c = 0 ;                      // in case readBytes() times out
       Serial.readBytes(&c, 1) ;         // block until a char arrives
       if ((c == 8) || (c == 127))       // handle BS or DEL
       {
-        if (buf_pos > 0) // do we need to erase a char ?
+        if (G_runtime->serial_buf_pos > 0) // do we need to erase a char ?
         {
           Serial.printf("\b \b") ;
-          buf_pos-- ;
-          buf[buf_pos] = 0 ;
+          G_runtime->serial_buf_pos-- ;
+          G_runtime->serial_buf[G_runtime->serial_buf_pos] = 0 ;
         }
       }
       else
-      if ((c == '\n') || (c == '\r') || (buf_pos == BUF_LEN_CONSOLE - 1))
+      if ((c == '\n') || (c == '\r') ||
+          (G_runtime->serial_buf_pos == BUF_LEN_CONSOLE - 1))
       {
         Serial.printf("\r\n") ;
-        if (buf_pos == BUF_LEN_CONSOLE - 1)
+        if (G_runtime->serial_buf_pos == BUF_LEN_CONSOLE - 1)
         {
           Serial.printf("WARNING: Command exceeds %d bytes, ignoring.\r\n",
                         BUF_LEN_CONSOLE - 1) ;
-          buf[0] = 0 ;
-          buf_pos = 0 ;
+          G_runtime->serial_buf[0] = 0 ;
+          G_runtime->serial_buf_pos = 0 ;
         }
         break ;
       }
@@ -89,17 +96,18 @@ void f_serial_console_thread(void *param)
       if (c > 0)                                // a normal char
       {
         Serial.printf("%c", c) ;
-        buf[buf_pos] = c ;
-        buf[buf_pos+1] = 0 ;
-        buf_pos++ ;
+        G_runtime->serial_buf[G_runtime->serial_buf_pos] = c ;
+        G_runtime->serial_buf[G_runtime->serial_buf_pos+1] = 0 ;
+        G_runtime->serial_buf_pos++ ;
       }
     }
 
     // now handle the command
 
-    if (strlen(buf) > 0)
+    if (G_runtime->serial_buf_pos > 0)
     {
-      Serial.printf("Handling command '%s'(%d)\r\n", buf, strlen(buf)) ;
+      Serial.printf("Handling command '%s'(%d)\r\n",
+                    G_runtime->serial_buf, G_runtime->serial_buf_pos) ;
     }
   }
 }
@@ -110,7 +118,8 @@ void setup ()
 {
   // initalize data structures
 
-  memset(&G_runtime, 0, sizeof(G_runtime)) ;
+  G_runtime = (S_RuntimeData*) malloc(sizeof(S_RuntimeData)) ;
+  memset(G_runtime, 0, sizeof(G_runtime)) ;
 
   // print out some info to show that we're alive.
 
@@ -120,6 +129,7 @@ void setup ()
   Serial.setTimeout(1000) ;
   Serial.printf("\r\nBOOT: Running esp32io git commit %s, built %s.\r\n",
                 BUILD_COMMIT, BUILD_TIME) ;
+  Serial.printf("BOOT: G_runtime is %d bytes.\r\n", sizeof(S_RuntimeData)) ;
   Serial.printf("BOOT: Wifi mac: %s\r\n", WiFi.macAddress().c_str()) ;
   Serial.printf("BOOT: Chip temperature: %.2fC\r\n", temperatureRead()) ;
 
