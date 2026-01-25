@@ -19,9 +19,10 @@ struct runtime_data {
   int serial_buf_pos ;
   char serial_buf[BUF_LEN_CONSOLE] ;
 
-
   // web server data structures
 
   S_WebClient webclients[DEF_WEBSERVER_MAX_CLIENTS] ;
+  char metrics_buf[BUF_LEN_METRICS] ;
+
 } ; typedef struct runtime_data S_RuntimeData ;
 

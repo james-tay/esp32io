@@ -43,6 +43,7 @@
 
 #define BUF_LEN_CONSOLE 256             // user command buffer on serial
 #define BUF_LEN_WEBCLIENT 256           // buffer for webclient HTTP header
+#define BUF_LEN_METRICS 1024            // buffer for "/metrics" response
 
 #include <WiFi.h>
 

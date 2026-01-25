@@ -1,4 +1,47 @@
 /*
+   This is a convenience function to close a connected TCP client and reset
+   its S_WebClient structure.
+*/
+
+void f_close_webclient(int idx)
+{
+  close(G_runtime->webclients[idx].sd) ;
+  G_runtime->webclients[idx].sd = -1 ;
+  G_runtime->webclients[idx].buf_pos = 0 ;
+  G_runtime->webclients[idx].buf[0] = 0 ;
+}
+
+/*
+   This function is called from "f_handle_webclient()" when a complete HTTP
+   request has been identified for the webclient "idx". This request is
+   supplied to us as "method" (ie, "GET") and "uri" (ie, "/foo?key=value").
+   Our job is to parse "uri" and figure out what to do with it.
+*/
+
+void f_handle_webrequest(int idx, char *method, char *uri)
+{
+  if ((strcmp(method, "GET") == 0) && (strcmp(uri, "/metrics") == 0))
+  {
+    strcpy(G_runtime->metrics_buf, "HTTP/1.1 200 OK\n") ;
+    strcat(G_runtime->metrics_buf, "Content-Type: text/plain\n") ;
+    strcat(G_runtime->metrics_buf, "Connection: close\n\n") ;
+    write(G_runtime->webclients[idx].sd,
+          G_runtime->metrics_buf, strlen(G_runtime->metrics_buf)) ;
+
+    sprintf(G_runtime->metrics_buf, "ec_chip_temperature %.2f\n",
+            temperatureRead()) ;
+
+
+
+
+    write(G_runtime->webclients[idx].sd,
+          G_runtime->metrics_buf, strlen(G_runtime->metrics_buf)) ;
+    f_close_webclient(idx) ;
+  }
+
+}
+
+/*
    This function is called from "f_webserver_thread()" when there's some
    activity on the webclient at "idx". Our job is to investigate what this
    could be - which is either more bytes coming in, or the TCP session was
@@ -8,13 +51,13 @@
 void f_handle_webclient(int idx)
 {
   int amt, available ;
+  char *request=NULL ;
   S_WebClient *client = &(G_runtime->webclients[idx]) ;
 
   available = BUF_LEN_WEBCLIENT - client->buf_pos - 1 ;
-  if (available < 1)
+  if (available < 1)                    // no more buffer for HTTP header
   {
-    close(client->sd) ;
-    client->sd = -1 ;
+    f_close_webclient(idx) ;
     return ;
   }
 
@@ -23,13 +66,46 @@ void f_handle_webclient(int idx)
   {
     client->buf_pos = client->buf_pos + amt ;
     client->buf[client->buf_pos] = 0 ;
+
+    // have we received the full HTTP header ? Just check for 2x new lines
+
+    if ((strstr(client->buf, "\n\n")) || (strstr(client->buf, "\r\n\r\n")))
+    {
+      // Now isolate the first line and discard the rest
+
+      for (int i=0 ; i < client->buf_pos ; i++)
+        if ((client->buf[i] == '\r') || (client->buf[i] == '\n'))
+        {
+          client->buf[i] = 0 ;
+          client->buf_pos = i ;
+          request = client->buf ;       // indicate we go to the next step
+          break ;
+        }
+    }
   }
-  else
+  else                                  // TCP session closed on us
+    f_close_webclient(idx) ;
+
+  /*
+     if "request" is set, then it (hopefully) points to a request line, eg
+       GET /path/to/endpoint?key=value HTTP/1.1
+
+     pull this apart into "method", "uri" and "proto".
+  */
+
+  if (request)
   {
-    close(client->sd) ;
-    client->sd = -1 ;
-    client->buf_pos = 0 ;
-    client->buf[0] = 0 ;
+    char *method=NULL, *uri=NULL, *proto=NULL, *c_idx=NULL ;
+
+    method = strtok_r(request, " ", &c_idx) ;
+    if (method)
+      uri = strtok_r(NULL, " ", &c_idx) ;
+      if (uri)
+        proto = strtok_r(NULL, " ", &c_idx) ;
+
+    if ((method) && (uri) && (proto) &&
+        ((strcmp(proto, "HTTP/1.0")==0) || strcmp(proto, "HTTP/1.1")==0))
+      f_handle_webrequest(idx, method, uri) ;
   }
 }
 
