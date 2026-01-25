@@ -1,10 +1,28 @@
 /*
-   Overview
+   OVERVIEW
 
    This program manages the operations on an ESP32. Commands can be sent to
-   the device via serial console or via a web server over wifi. All commands
-   are sent to a queue.
+   this device via serial console or via a web server over wifi. All commands
+   are sent to a queue, where a pool of worker threads evaluate them. Once each
+   task is completed, its response is delivered back to the user.
 
+   INTERNAL THREADS
+
+   The serial console is implemented by a single thread which reads commands
+   from the user. Once a command is complete, it is put into the queue and
+   the thread blocks with "ulTaskNotifyTake()". Once a worker thread has
+   dequeued and completed the task, it calls "xTaskNotifyGive()" to unblock
+   the serial console thread.
+
+   The web server runs in a single thread, typically listening for new TCP
+   connections or receiving bytes on connected TCP sockets. Thus it uses
+   "select()" to block until there is activity. Once a user command has been
+   identified, it is placed in the queue. When this task has been completed by
+   some worker thread, the worker thread needs to notify the web server thread
+   of the completed work. To accomplish this, the web server thread creates a
+   UDP server socket which binds to loopback. This socket descriptor is also
+   monitored in the webserver thread's "select()". The worker thread then sends
+   a UDP packet to signal the web server thread that a result is ready.
 */
 
 #define DEF_SERIAL_BAUD	115200          // serial port (over USB)
@@ -13,6 +31,7 @@
 #define DEF_THREAD_STACKSIZE 2048       // stack size when thread is created
 #define DEF_CONSOLE_THREAD_PRIORITY 1   // thread scheduling priority
 #define DEF_WEBSERVER_THREAD_PRIORITY 2 // thread scheduling priority
+#define DEF_WEBSERVER_EVENT_PORT 65501  // UDP mesg indicating task completion
 
 #define BUF_LEN_CONSOLE 256             // user command buffer on serial
 
@@ -42,8 +61,9 @@ void f_serial_console_thread(void *param)
     Serial.printf("> ") ;
     while (1)
     {
-      Serial.readBytes(&c, 1) ;                 // Block until a char arrives
-      if ((c == 8) || (c == 127))               // handle BS or DEL
+      c = 0 ;                           // in case readBytes() times out
+      Serial.readBytes(&c, 1) ;         // block until a char arrives
+      if ((c == 8) || (c == 127))       // handle BS or DEL
       {
         if (buf_pos > 0) // do we need to erase a char ?
         {
@@ -97,7 +117,7 @@ void setup ()
   delay (1000) ;
   WiFi.mode(WIFI_STA) ;
   Serial.begin(DEF_SERIAL_BAUD) ;
-  Serial.setTimeout(LONG_MAX) ;
+  Serial.setTimeout(1000) ;
   Serial.printf("\r\nBOOT: Running esp32io git commit %s, built %s.\r\n",
                 BUILD_COMMIT, BUILD_TIME) ;
   Serial.printf("BOOT: Wifi mac: %s\r\n", WiFi.macAddress().c_str()) ;
