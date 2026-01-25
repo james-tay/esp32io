@@ -35,11 +35,11 @@
 #define DEF_SERIAL_BAUD	115200          // serial port (over USB)
 #define DEF_RGBLED_PIN 48               // RGB led on ESP32-S3 dev board
 #define DEF_RGBLED_BLINK_MS 10          // how long LED stays on
-#define DEF_THREAD_STACKSIZE 2048       // stack size when thread is created
+#define DEF_THREAD_STACKSIZE 8192       // stack size when thread is created
 #define DEF_CONSOLE_THREAD_PRIORITY 1   // thread scheduling priority
 #define DEF_WEBSERVER_THREAD_PRIORITY 2 // thread scheduling priority
 #define DEF_WEBSERVER_EVENT_PORT 65501  // UDP mesg indicating task completion
-#define DEF_WEBSERVER_MAX_CLIENTS 8     // maximum concurrent HTTP clients
+#define DEF_WEBSERVER_MAX_CLIENTS 4     // maximum concurrent HTTP clients
 
 #define BUF_LEN_CONSOLE 256             // user command buffer on serial
 #define BUF_LEN_WEBCLIENT 256           // buffer for webclient HTTP header
@@ -116,12 +116,12 @@ void f_serial_console_thread(void *param)
 
 void setup ()
 {
-  // initalize data structures
+  // initalize our runtime data structures
 
   G_runtime = (S_RuntimeData*) malloc(sizeof(S_RuntimeData)) ;
   memset(G_runtime, 0, sizeof(G_runtime)) ;
 
-  // print out some info to show that we're alive.
+  // print out some info to show that we're booting up
 
   delay (1000) ;
   WiFi.mode(WIFI_STA) ;
@@ -172,7 +172,7 @@ void setup ()
     NULL,                               // task handle
     0) ;                                // core ID
 
-  // blink RGB LED to indicate we've completed initialization.
+  // blink RGB LED to indicate we've completed initialization
 
   neopixelWrite(DEF_RGBLED_PIN, 255, 0, 0) ;
   delay (333) ;
