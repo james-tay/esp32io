@@ -90,6 +90,7 @@ void f_serial_console_thread(void *param)
                         BUF_LEN_CONSOLE - 1) ;
           G_runtime->serial_buf[0] = 0 ;
           G_runtime->serial_buf_pos = 0 ;
+          G_runtime->serial_overruns++ ;
         }
         break ;
       }
@@ -100,6 +101,7 @@ void f_serial_console_thread(void *param)
         G_runtime->serial_buf[G_runtime->serial_buf_pos] = c ;
         G_runtime->serial_buf[G_runtime->serial_buf_pos+1] = 0 ;
         G_runtime->serial_buf_pos++ ;
+        G_runtime->serial_in_bytes++ ;
       }
     }
 
@@ -107,6 +109,7 @@ void f_serial_console_thread(void *param)
 
     if (G_runtime->serial_buf_pos > 0)
     {
+      G_runtime->serial_commands++ ;
       Serial.printf("Handling command '%s'(%d)\r\n",
                     G_runtime->serial_buf, G_runtime->serial_buf_pos) ;
     }
@@ -120,7 +123,7 @@ void setup ()
   // initalize our runtime data structures
 
   G_runtime = (S_RuntimeData*) malloc(sizeof(S_RuntimeData)) ;
-  memset(G_runtime, 0, sizeof(G_runtime)) ;
+  memset(G_runtime, 0, sizeof(S_RuntimeData)) ;
 
   // print out some info to show that we're booting up
 

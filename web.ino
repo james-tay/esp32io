@@ -20,22 +20,47 @@ void f_close_webclient(int idx)
 
 void f_handle_webrequest(int idx, char *method, char *uri)
 {
+  #define BUF_LEN_TMP 128
+
+  char line[BUF_LEN_TMP] ;
+
   if ((strcmp(method, "GET") == 0) && (strcmp(uri, "/metrics") == 0))
   {
-    strcpy(G_runtime->metrics_buf, "HTTP/1.1 200 OK\n") ;
-    strcat(G_runtime->metrics_buf, "Content-Type: text/plain\n") ;
-    strcat(G_runtime->metrics_buf, "Connection: close\n\n") ;
-    write(G_runtime->webclients[idx].sd,
-          G_runtime->metrics_buf, strlen(G_runtime->metrics_buf)) ;
+    S_RuntimeData *r = G_runtime ; // a macro since we're referencing it a lot
 
-    sprintf(G_runtime->metrics_buf, "ec_chip_temperature %.2f\n",
-            temperatureRead()) ;
+    strcpy(r->metrics_buf, "HTTP/1.1 200 OK\n") ;
+    strcat(r->metrics_buf, "Content-Type: text/plain\n") ;
+    strcat(r->metrics_buf, "Connection: close\n\n") ;
+    write(r->webclients[idx].sd, r->metrics_buf, strlen(r->metrics_buf)) ;
+
+    r->metrics_buf[0] = 0 ;
+    snprintf(line, BUF_LEN_TMP, "ec_chip_temperature %.2f\n",
+             temperatureRead()) ;
+    strncat(r->metrics_buf, line, BUF_LEN_METRICS) ;
+
+    // serial port metrics
+
+    snprintf(line, BUF_LEN_TMP, "ec_serial_in_bytes %lu\n",
+             r->serial_in_bytes) ;
+    strncat(r->metrics_buf, line, BUF_LEN_METRICS) ;
+    snprintf(line, BUF_LEN_TMP, "ec_serial_commands %lu\n",
+             r->serial_commands) ;
+    strncat(r->metrics_buf, line, BUF_LEN_METRICS) ;
+    snprintf(line, BUF_LEN_TMP, "ec_serial_overruns %lu\n",
+             r->serial_overruns) ;
+    strncat(r->metrics_buf, line, BUF_LEN_METRICS) ;
+
+    // web server metrics
+
+    snprintf(line, BUF_LEN_TMP, "ec_web_accepts %lu\n",
+             r->web_accepts) ;
+    strncat(r->metrics_buf, line, BUF_LEN_METRICS) ;
+    snprintf(line, BUF_LEN_TMP, "ec_web_busy_rejects %lu\n",
+             r->web_busy_rejects) ;
+    strncat(r->metrics_buf, line, BUF_LEN_METRICS) ;
 
 
-
-
-    write(G_runtime->webclients[idx].sd,
-          G_runtime->metrics_buf, strlen(G_runtime->metrics_buf)) ;
+    write(r->webclients[idx].sd, r->metrics_buf, strlen(r->metrics_buf)) ;
     f_close_webclient(idx) ;
   }
 
@@ -57,6 +82,7 @@ void f_handle_webclient(int idx)
   available = BUF_LEN_WEBCLIENT - client->buf_pos - 1 ;
   if (available < 1)                    // no more buffer for HTTP header
   {
+    G_runtime->web_requests_overrun++ ;
     f_close_webclient(idx) ;
     return ;
   }
@@ -105,7 +131,12 @@ void f_handle_webclient(int idx)
 
     if ((method) && (uri) && (proto) &&
         ((strcmp(proto, "HTTP/1.0")==0) || strcmp(proto, "HTTP/1.1")==0))
+    {
+      G_runtime->web_requests_received++ ;
       f_handle_webrequest(idx, method, uri) ;
+    }
+    else
+      G_runtime->web_invalid_requests++ ;
   }
 }
 
@@ -183,19 +214,20 @@ void f_webserver_thread (void *param)
             G_runtime->webclients[idx].buf_pos = 0 ;
             G_runtime->webclients[idx].buf[0] = 0 ;
             G_runtime->webclients[idx].ts_last_activity = millis() ;
+            G_runtime->web_accepts++ ;
             break ;
           }
 
         if (idx == DEF_WEBSERVER_MAX_CLIENTS)   // ops, no available slots
+        {
           close(new_sd) ;
+          G_runtime->web_busy_rejects++ ;
+        }
       }
 
       for (idx=0 ; idx < DEF_WEBSERVER_MAX_CLIENTS ; idx++)
         if (FD_ISSET(G_runtime->webclients[idx].sd, &fds))
           f_handle_webclient(idx) ;             // found activity on webclient
     }
-
-
-
   }
 }

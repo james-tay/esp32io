@@ -1,6 +1,6 @@
 #include <lwip/netdb.h>
 
-/* This structure tracks a single (connected) HTTP client */
+// This structure tracks a single (connected) HTTP client
 
 struct web_client
 {
@@ -10,7 +10,7 @@ struct web_client
   char buf[BUF_LEN_WEBCLIENT] ;         // buffer for webclient http header
 } ; typedef struct web_client S_WebClient ;
 
-/* This structure holds all global and shared runtime info */
+// This structure holds all global and shared runtime info
 
 struct runtime_data {
 
@@ -23,6 +23,17 @@ struct runtime_data {
 
   S_WebClient webclients[DEF_WEBSERVER_MAX_CLIENTS] ;
   char metrics_buf[BUF_LEN_METRICS] ;
+
+  // various performance metrics
+
+  unsigned long serial_in_bytes ;               // total bytes read
+  unsigned long serial_commands ;               // total commands issued
+  unsigned long serial_overruns ;               // serial buffer overrun
+  unsigned long web_accepts ;                   // clients assigned to a slot
+  unsigned long web_busy_rejects ;              // no available slots
+  unsigned long web_requests_overrun ;          // web client buffer overrun
+  unsigned long web_requests_received ;         // successfully parsed requests
+  unsigned long web_invalid_requests ;          // can't parse HTTP request
 
 } ; typedef struct runtime_data S_RuntimeData ;
 
