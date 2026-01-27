@@ -40,6 +40,7 @@
 #define DEF_WEBSERVER_THREAD_PRIORITY 2 // thread scheduling priority
 #define DEF_WEBSERVER_EVENT_PORT 65501  // UDP mesg indicating task completion
 #define DEF_WEBSERVER_MAX_CLIENTS 4     // maximum concurrent HTTP clients
+#define DEF_WORKER_THREADS 4            // threads which execute commands
 
 #define BUF_LEN_CONSOLE 256             // user command buffer on serial
 #define BUF_LEN_WEBCLIENT 256           // buffer for webclient HTTP header

@@ -20,9 +20,8 @@ void f_close_webclient(int idx)
 
 void f_handle_webrequest(int idx, char *method, char *uri)
 {
-  #define BUF_LEN_TMP 128
-
-  char line[BUF_LEN_TMP] ;
+  #define LINE_LEN 128
+  char s[LINE_LEN] ;
 
   if ((strcmp(method, "GET") == 0) && (strcmp(uri, "/metrics") == 0))
   {
@@ -33,37 +32,46 @@ void f_handle_webrequest(int idx, char *method, char *uri)
     strcat(r->metrics_buf, "Connection: close\n\n") ;
     write(r->webclients[idx].sd, r->metrics_buf, strlen(r->metrics_buf)) ;
 
+    // base system metrics
+
     r->metrics_buf[0] = 0 ;
-    snprintf(line, BUF_LEN_TMP, "ec_chip_temperature %.2f\n",
-             temperatureRead()) ;
-    strncat(r->metrics_buf, line, BUF_LEN_METRICS) ;
+    snprintf(s, LINE_LEN, "ec_uptime_secs %lu\n", millis() / 1000) ;
+    strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+    snprintf(s, LINE_LEN, "ec_chip_temperature %.2f\n", temperatureRead()) ;
+    strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+    snprintf(s, LINE_LEN, "ec_free_heap_bytes %ld\n", xPortGetFreeHeapSize()) ;
+    strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
 
     // serial port metrics
 
-    snprintf(line, BUF_LEN_TMP, "ec_serial_in_bytes %lu\n",
-             r->serial_in_bytes) ;
-    strncat(r->metrics_buf, line, BUF_LEN_METRICS) ;
-    snprintf(line, BUF_LEN_TMP, "ec_serial_commands %lu\n",
-             r->serial_commands) ;
-    strncat(r->metrics_buf, line, BUF_LEN_METRICS) ;
-    snprintf(line, BUF_LEN_TMP, "ec_serial_overruns %lu\n",
-             r->serial_overruns) ;
-    strncat(r->metrics_buf, line, BUF_LEN_METRICS) ;
+    snprintf(s, LINE_LEN, "ec_serial_in_bytes %lu\n", r->serial_in_bytes) ;
+    strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+    snprintf(s, LINE_LEN, "ec_serial_commands %lu\n", r->serial_commands) ;
+    strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+    snprintf(s, LINE_LEN, "ec_serial_overruns %lu\n", r->serial_overruns) ;
+    strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
 
     // web server metrics
 
-    snprintf(line, BUF_LEN_TMP, "ec_web_accepts %lu\n",
-             r->web_accepts) ;
-    strncat(r->metrics_buf, line, BUF_LEN_METRICS) ;
-    snprintf(line, BUF_LEN_TMP, "ec_web_busy_rejects %lu\n",
-             r->web_busy_rejects) ;
-    strncat(r->metrics_buf, line, BUF_LEN_METRICS) ;
+    snprintf(s, LINE_LEN, "ec_web_accepts %lu\n", r->web_accepts) ;
+    strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+    snprintf(s, LINE_LEN, "ec_web_busy_rejects %lu\n", r->web_busy_rejects) ;
+    strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+    snprintf(s, LINE_LEN, "ec_web_requests_overrun %lu\n",
+             r->web_requests_overrun) ;
+    strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+    snprintf(s, LINE_LEN, "ec_web_requests_received %lu\n",
+             r->web_requests_received) ;
+    strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+    snprintf(s, LINE_LEN, "ec_web_invalid_requests %lu\n",
+             r->web_invalid_requests) ;
+    strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
 
+    // we're done ! send off all our metrics
 
     write(r->webclients[idx].sd, r->metrics_buf, strlen(r->metrics_buf)) ;
     f_close_webclient(idx) ;
   }
-
 }
 
 /*
