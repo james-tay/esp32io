@@ -24,6 +24,10 @@
    monitored in the webserver thread's "select()". The worker thread then sends
    a UDP packet to signal the web server thread that a result is ready.
 
+   In general, all internal threads (eg, webserver, workers, etc) will run on
+   core-0. We'll try to reserve core-1 for user threads which might be time
+   or performance critical.
+
    INTERNAL DATA STRUCTURES
 
    One thing we want to avoid is calling "malloc()" many times, resulting in
@@ -36,15 +40,22 @@
 #define DEF_RGBLED_PIN 48               // RGB led on ESP32-S3 dev board
 #define DEF_RGBLED_BLINK_MS 10          // how long LED stays on
 #define DEF_THREAD_STACKSIZE 8192       // stack size when thread is created
-#define DEF_CONSOLE_THREAD_PRIORITY 1   // thread scheduling priority
-#define DEF_WEBSERVER_THREAD_PRIORITY 2 // thread scheduling priority
 #define DEF_WEBSERVER_EVENT_PORT 65501  // UDP mesg indicating task completion
 #define DEF_WEBSERVER_MAX_CLIENTS 4     // maximum concurrent HTTP clients
 #define DEF_WORKER_THREADS 4            // threads which execute commands
 
+// thread scheduling priorities
+
+#define DEF_WORKER_PRIORITY 1           // thread scheduling priority
+#define DEF_CONSOLE_THREAD_PRIORITY 2   // thread scheduling priority
+#define DEF_WEBSERVER_THREAD_PRIORITY 3 // thread scheduling priority
+
+// various buffer sizes
+
 #define BUF_LEN_CONSOLE 256             // user command buffer on serial
 #define BUF_LEN_WEBCLIENT 256           // buffer for webclient HTTP header
 #define BUF_LEN_METRICS 1024            // buffer for "/metrics" response
+#define BUF_LEN_WORKER_NAME 12          // how long worker thread name is
 
 #include <WiFi.h>
 
@@ -161,7 +172,7 @@ void setup ()
     f_serial_console_thread,            // function to run
     "thr_console",                      // name which shows up in crash dumps
     DEF_THREAD_STACKSIZE,               // stack size
-    NULL,                               // param to pass
+    NULL,                               // param to pass into thread
     DEF_CONSOLE_THREAD_PRIORITY,        // priority (higher is more important)
     NULL,                               // task handle
     0) ;                                // core ID
@@ -172,10 +183,26 @@ void setup ()
     f_webserver_thread,                 // function to run
     "thr_webserver",                    // name which shows up in crash dumps
     DEF_THREAD_STACKSIZE,               // stack size
-    NULL,                               // param to pass
+    NULL,                               // param to pass into thread
     DEF_WEBSERVER_THREAD_PRIORITY,      // priority (higher is more important)
     NULL,                               // task handle
     0) ;                                // core ID
+
+  // create worker threads
+
+  for (int i=0 ; i < DEF_WORKER_THREADS ; i++)
+  {
+    G_runtime->worker[i].id = i ;
+    snprintf(G_runtime->worker[i].name, BUF_LEN_WORKER_NAME, "worker%d", i) ;
+    xTaskCreatePinnedToCore (
+      f_worker_thread,                  // function to run
+      G_runtime->worker[i].name,        // name which shows up in crash dumps
+      DEF_THREAD_STACKSIZE,             // stack size
+      &G_runtime->worker[i].id,         // param to pass into thread
+      DEF_WORKER_PRIORITY,              // priority (higher is more important)
+      &G_runtime->worker[i].handle,     // task handle
+      0) ;                              // core ID
+  }
 
   // blink RGB LED to indicate we've completed initialization
 

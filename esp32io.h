@@ -10,6 +10,18 @@ struct web_client
   char buf[BUF_LEN_WEBCLIENT] ;         // buffer for webclient http header
 } ; typedef struct web_client S_WebClient ;
 
+struct worker_data
+{
+  int id ;                              // worker thread ID
+  char name[BUF_LEN_WORKER_NAME] ;      // name in xTaskCreatePinnedToCore()
+  TaskHandle_t handle ;                 // from xTaskCreatePinnedToCore() call
+
+  // performance metrics
+
+
+
+} ; typedef struct worker_data S_WorkerData ;
+
 // This structure holds all global and shared runtime info
 
 struct runtime_data {
@@ -23,6 +35,11 @@ struct runtime_data {
 
   S_WebClient webclients[DEF_WEBSERVER_MAX_CLIENTS] ;
   char metrics_buf[BUF_LEN_METRICS] ;
+
+  // worker threads
+
+  S_WorkerData worker[DEF_WORKER_THREADS] ;
+  int next_worker ;
 
   // various performance metrics
 
