@@ -13,8 +13,13 @@ struct web_client
 struct worker_data
 {
   int id ;                              // worker thread ID
+  int state ;                           // W_IDLE, W_BUSY or W_DONE
   char name[BUF_LEN_WORKER_NAME] ;      // name in xTaskCreatePinnedToCore()
-  TaskHandle_t handle ;                 // from xTaskCreatePinnedToCore() call
+  TaskHandle_t w_handle ;               // from xTaskCreatePinnedToCore() call
+
+  int caller ;                          // -1=serial, otherwise webclient->sd
+  int result_code ;                     // 1=success, 0=error
+  char result_msg[BUF_LEN_WORKER_RESULT] ;
 
   // performance metrics
 
@@ -30,6 +35,7 @@ struct runtime_data {
 
   int serial_buf_pos ;
   char serial_buf[BUF_LEN_CONSOLE] ;
+  TaskHandle_t sconsole_handle ;        // from xTaskCreatePinnedToCore() call
 
   // web server data structures
 
@@ -40,6 +46,10 @@ struct runtime_data {
 
   S_WorkerData worker[DEF_WORKER_THREADS] ;
   int next_worker ;
+
+  // acquire these locks before interacting with the specified resources
+
+  SemaphoreHandle_t L_worker ;          // "next_worker"
 
   // various performance metrics
 

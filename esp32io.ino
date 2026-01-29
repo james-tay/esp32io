@@ -8,21 +8,22 @@
 
    INTERNAL THREADS
 
-   The serial console is implemented by a single thread which reads commands
-   from the user. Once a command is complete, it is put into the queue and
-   the thread blocks with "ulTaskNotifyTake()". Once a worker thread has
-   dequeued and completed the task, it calls "xTaskNotifyGive()" to unblock
-   the serial console thread.
+   The serial console is implemented by a single thread which reads bytes from
+   the user. Once a complete command is received, it is assigned to a worker
+   thread and the serial console thread blocks with "ulTaskNotifyTake()". Once
+   a worker thread has completed this task, it calls "xTaskNotifyGive()" to
+   unblock the serial console thread.
 
-   The web server runs in a single thread, typically listening for new TCP
+   The web server runs in another thread, typically listening for new TCP
    connections or receiving bytes on connected TCP sockets. Thus it uses
    "select()" to block until there is activity. Once a user command has been
-   identified, it is placed in the queue. When this task has been completed by
-   some worker thread, the worker thread needs to notify the web server thread
-   of the completed work. To accomplish this, the web server thread creates a
-   UDP server socket which binds to loopback. This socket descriptor is also
-   monitored in the webserver thread's "select()". The worker thread then sends
-   a UDP packet to signal the web server thread that a result is ready.
+   identified, it is similarly handed to a worker thread. When this task has
+   been completed by the worker thread, the worker thread needs to notify the
+   web server thread of the completed work. To accomplish this, the web server
+   thread creates a UDP server socket which binds to loopback. This socket
+   descriptor is also monitored in the webserver thread's "select()". The
+   worker thread then sends a UDP packet to signal the web server thread that
+   a result is ready.
 
    In general, all internal threads (eg, webserver, workers, etc) will run on
    core-0. We'll try to reserve core-1 for user threads which might be time
@@ -32,8 +33,26 @@
 
    One thing we want to avoid is calling "malloc()" many times, resulting in
    memory fragmentation. Instead, if we pack all known fixed length buffers
-   into a single struct, then we can call 1x "malloc()" at boot and use a
-   single contiguous block of memory. This is the motivation of "G_runtime".
+   into a single struct, then we can call exactly 1 "malloc()" at boot and use
+   a single contiguous block of memory. This is the motivation of "G_runtime".
+
+   When a command is received on the serial console or webclient, the serial
+   console thread or webserver thread identifies an available worker thread.
+   The worker thread's "cmd" points to the buffer storing this command and the
+   worker is woken up with a call to "xTaskNotifyGive()". Once the worker has
+   done its work, it writes to "result_code" and "result_msg" before notifying
+   the serial console thread or webserver thread that it is done. Thus, the
+   worker thread has the following states,
+     W_IDLE  - blocked, can be assigned work
+     W_SETUP - selected for work, but worker thread is still idle
+     W_BUSY  - thread has woken up and is working on the task
+     W_DONE  - thread results written, the caller retrives the results and MUST
+              set the worker's state back to IDLE
+
+   Whenever we try to identify a W_IDLE worker thread, we'd typically use
+   "G_runtime->next_worker". If that worker is not W_IDLE, then we try the
+   next one and so on. Each time we try another worker thread, we delay our
+   attempt until we reach DEF_WORKER_FIND_MAX_MS.
 */
 
 #define DEF_SERIAL_BAUD	115200          // serial port (over USB)
@@ -43,6 +62,7 @@
 #define DEF_WEBSERVER_EVENT_PORT 65501  // UDP mesg indicating task completion
 #define DEF_WEBSERVER_MAX_CLIENTS 4     // maximum concurrent HTTP clients
 #define DEF_WORKER_THREADS 4            // threads which execute commands
+#define DEF_WORKER_FIND_MAX_MS 500      // max delay between finding workers
 
 // thread scheduling priorities
 
@@ -56,6 +76,14 @@
 #define BUF_LEN_WEBCLIENT 256           // buffer for webclient HTTP header
 #define BUF_LEN_METRICS 1024            // buffer for "/metrics" response
 #define BUF_LEN_WORKER_NAME 12          // how long worker thread name is
+#define BUF_LEN_WORKER_RESULT 256       // worker thread's "result_msg"
+
+// worker thread states
+
+#define W_IDLE  0                       // blocked, can be assigned work
+#define W_SETUP 1                       // selected for work, but still idle
+#define W_BUSY  2                       // thread is awake and running
+#define W_DONE  3                       // caller reads results and sets W_IDLE
 
 #include <WiFi.h>
 
@@ -67,16 +95,77 @@ S_RuntimeData *G_runtime=NULL ;
 
 // ============================================================================
 
+/*
+   This function is called whenever we need to find an available worker thread.
+   We'll search using "G_runtime->next_worker", until we find a worker thread
+   in the W_IDLE state. Each time we search for the next worker, we'll delay
+   the search by "find_delay_ms", but not longer than DEF_WORKER_FIND_MAX_MS.
+   The available worker thread ID is returned.
+*/
+
+int f_get_next_worker()
+{
+  int find_delay_ms = 1 ;
+  while (1)
+  {
+    // we may be called from serial console thread or the webserver thread
+
+    xSemaphoreTake(G_runtime->L_worker, portMAX_DELAY) ;
+    int tid = G_runtime->next_worker ;
+    G_runtime->next_worker++ ;
+    if (G_runtime->next_worker == DEF_WORKER_THREADS)
+      G_runtime->next_worker = 0 ;
+
+    // see if this worker is available, otherwise try again after a delay
+
+    if (G_runtime->worker[tid].state == W_IDLE)
+    {
+      G_runtime->worker[tid].state = W_SETUP ;
+      xSemaphoreGive(G_runtime->L_worker) ;
+      return(tid) ;
+    }
+    xSemaphoreGive(G_runtime->L_worker) ;
+
+    delay(find_delay_ms) ;
+    find_delay_ms++ ;
+    if (find_delay_ms > DEF_WORKER_FIND_MAX_MS)
+      find_delay_ms = DEF_WORKER_FIND_MAX_MS ;
+  }
+}
+
+/*
+   This function is called from "f_serial_console_thread()". Our job is to
+   hand off "G_runtime->serial_buf" to a worker thread, wait for the task
+   completion, and send the response back to the user (ie, serial port).
+*/
+
+void f_serial_command()
+{
+  int tid = f_get_next_worker() ;
+  Serial.printf("Assigned worker%d.\r\n", tid) ;
+
+  // do something
+
+  G_runtime->worker[tid].state = W_IDLE ;
+}
+
+/*
+   This function forms the thread life cycle of the serial console thread. We
+   concern ourselves with interacting with bytes on the serial port. When a
+   complete command is accumulated in "G_runtime->serial_buf", we hand off the
+   work to "f_serial_command()".
+*/
+
 void f_serial_console_thread(void *param)
 {
   delay(1000) ; // wait for setup() to complete
   while (1)
   {
-    // sit here and loop until we read a full command
-
     G_runtime->serial_buf_pos = 0 ;
     G_runtime->serial_buf[0] = 0 ;
     Serial.printf("> ") ;
+
+    // sit here and loop until we read a full command
 
     while (1)
     {
@@ -117,13 +206,12 @@ void f_serial_console_thread(void *param)
       }
     }
 
-    // now handle the command
+    // if we're here, that means we've received a full command
 
     if (G_runtime->serial_buf_pos > 0)
     {
       G_runtime->serial_commands++ ;
-      Serial.printf("Handling command '%s'(%d)\r\n",
-                    G_runtime->serial_buf, G_runtime->serial_buf_pos) ;
+      f_serial_command() ;
     }
   }
 }
@@ -136,6 +224,7 @@ void setup ()
 
   G_runtime = (S_RuntimeData*) malloc(sizeof(S_RuntimeData)) ;
   memset(G_runtime, 0, sizeof(S_RuntimeData)) ;
+  G_runtime->L_worker = xSemaphoreCreateMutex() ;
 
   // print out some info to show that we're booting up
 
@@ -174,7 +263,7 @@ void setup ()
     DEF_THREAD_STACKSIZE,               // stack size
     NULL,                               // param to pass into thread
     DEF_CONSOLE_THREAD_PRIORITY,        // priority (higher is more important)
-    NULL,                               // task handle
+    &G_runtime->sconsole_handle,        // task handle
     0) ;                                // core ID
 
   // start the "f_webserver_thread"
@@ -200,7 +289,7 @@ void setup ()
       DEF_THREAD_STACKSIZE,             // stack size
       &G_runtime->worker[i].id,         // param to pass into thread
       DEF_WORKER_PRIORITY,              // priority (higher is more important)
-      &G_runtime->worker[i].handle,     // task handle
+      &G_runtime->worker[i].w_handle,   // task handle
       0) ;                              // core ID
   }
 

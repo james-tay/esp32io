@@ -7,6 +7,12 @@ void f_worker_thread(void *param)
 
   while (1)
   {
-    delay(1000) ;
+    // sit here and wait until somebody tells us to do work
+
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY) ;
+
+
+
+
   }
 }
