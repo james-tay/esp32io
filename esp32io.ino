@@ -43,11 +43,11 @@
    done its work, it writes to "result_code" and "result_msg" before notifying
    the serial console thread or webserver thread that it is done. Thus, the
    worker thread has the following states,
-     W_IDLE  - blocked, can be assigned work
-     W_SETUP - selected for work, but worker thread is still idle
-     W_BUSY  - thread has woken up and is working on the task
-     W_DONE  - thread results written, the caller retrives the results and MUST
-              set the worker's state back to IDLE
+     W_IDLE  - blocked, can be selected for work
+     W_SETUP - selected by "f_get_next_worker()", worker thread is still idle
+     W_BUSY  - thread woken up by caller and is working on the task
+     W_DONE  - thread results prepared, the caller retrieves the results and
+               MUST release the worker by setting its state back to W_IDLE
 
    Whenever we try to identify a W_IDLE worker thread, we'd typically use
    "G_runtime->next_worker". If that worker is not W_IDLE, then we try the
@@ -100,7 +100,9 @@ S_RuntimeData *G_runtime=NULL ;
    We'll search using "G_runtime->next_worker", until we find a worker thread
    in the W_IDLE state. Each time we search for the next worker, we'll delay
    the search by "find_delay_ms", but not longer than DEF_WORKER_FIND_MAX_MS.
-   The available worker thread ID is returned.
+   Once an available worker is identified, we immediately set it to W_SETUP so
+   that it's clear that the worker has been assigned. The available worker
+   thread ID is then returned.
 */
 
 int f_get_next_worker()
@@ -120,7 +122,7 @@ int f_get_next_worker()
 
     if (G_runtime->worker[tid].state == W_IDLE)
     {
-      G_runtime->worker[tid].state = W_SETUP ;
+      G_runtime->worker[tid].state = W_SETUP ;  // mark worker as taken
       xSemaphoreGive(G_runtime->L_worker) ;
       return(tid) ;
     }
@@ -141,12 +143,25 @@ int f_get_next_worker()
 
 void f_serial_command()
 {
+  unsigned long ts_start = millis() ;
   int tid = f_get_next_worker() ;
-  Serial.printf("Assigned worker%d.\r\n", tid) ;
+  G_runtime->worker[tid].caller = -1 ;                  // identify as serial
+  G_runtime->worker[tid].cmd = G_runtime->serial_buf ;  // current user command
+  xTaskNotifyGive(G_runtime->worker[tid].w_handle) ;    // unblock worker
 
-  // do something
+  // wait for worker thread to tell us it's done
 
-  G_runtime->worker[tid].state = W_IDLE ;
+  ulTaskNotifyTake(pdTRUE, portMAX_DELAY) ;
+
+  // if we got here, that means the worker thread woke us up
+
+  unsigned long ts_end = millis() ;
+  Serial.printf("%s\r\ncode:%d latency:%dms\r\n",
+                G_runtime->worker[tid].result_msg,
+                G_runtime->worker[tid].result_code,
+                ts_end - ts_start) ;
+
+  G_runtime->worker[tid].state = W_IDLE ;               // release worker
 }
 
 /*

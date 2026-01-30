@@ -10,14 +10,17 @@ struct web_client
   char buf[BUF_LEN_WEBCLIENT] ;         // buffer for webclient http header
 } ; typedef struct web_client S_WebClient ;
 
+// This structure is used by a single worker thread.
+
 struct worker_data
 {
   int id ;                              // worker thread ID
-  int state ;                           // W_IDLE, W_BUSY or W_DONE
+  int state ;                           // W_IDLE, W_SETUP, W_BUSY or W_DONE
   char name[BUF_LEN_WORKER_NAME] ;      // name in xTaskCreatePinnedToCore()
   TaskHandle_t w_handle ;               // from xTaskCreatePinnedToCore() call
 
   int caller ;                          // -1=serial, otherwise webclient->sd
+  char *cmd ;                           // command we're assigned to work on
   int result_code ;                     // 1=success, 0=error
   char result_msg[BUF_LEN_WORKER_RESULT] ;
 
