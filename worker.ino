@@ -11,13 +11,25 @@ void f_worker_thread(void *param)
 
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY) ;
     G_runtime->worker[myidx].state = W_BUSY ;
+    G_runtime->worker[myidx].ts_start = millis() ;
 
     // put in dummy response to indicate we did work.
 
     snprintf(G_runtime->worker[myidx].result_msg, BUF_LEN_WORKER_RESULT,
-             "hello world from %s.", G_runtime->worker[myidx].name) ;
+             "%s cmd(%s)",
+             G_runtime->worker[myidx].name,
+             G_runtime->worker[myidx].cmd) ;
+
     G_runtime->worker[myidx].result_code = 200 ;
     G_runtime->worker[myidx].state = W_DONE ;
+
+    // update our internal metrics to reflect work we just did
+
+    G_runtime->worker[myidx].cmds_executed++ ;
+    G_runtime->worker[myidx].ts_last_cmd = millis() ;
+    G_runtime->worker[myidx].total_busy_ms +=
+      G_runtime->worker[myidx].ts_last_cmd -
+      G_runtime->worker[myidx].ts_start ;
 
     // notify the caller that we're done
 
@@ -33,7 +45,6 @@ void f_worker_thread(void *param)
       dest_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK) ;
       dest_addr.sin_family = AF_INET;
       dest_addr.sin_port = htons(DEF_WEBSERVER_EVENT_PORT) ;
-
       sendto(G_runtime->notify_sd, &payload, 1, 0,
              (struct sockaddr*)&dest_addr, sizeof(dest_addr)) ;
     }

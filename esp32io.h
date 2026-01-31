@@ -21,7 +21,6 @@ struct worker_data
   int state ;                           // W_IDLE, W_SETUP, W_BUSY or W_DONE
   char name[BUF_LEN_WORKER_NAME] ;      // name in xTaskCreatePinnedToCore()
   TaskHandle_t w_handle ;               // from xTaskCreatePinnedToCore() call
-
   int caller ;                          // -1=serial, otherwise webclient "idx"
   char *cmd ;                           // command we're assigned to work on
   int result_code ;                     // 1=success, 0=error
@@ -29,7 +28,10 @@ struct worker_data
 
   // performance metrics
 
-
+  unsigned long cmds_executed ;         // total number of commands executed
+  unsigned long total_busy_ms ;         // total number of millisecs busy
+  unsigned long ts_start ;              // millis() of when we started work
+  unsigned long ts_last_cmd ;           // millis() of when we completed work
 
 } ; typedef struct worker_data S_WorkerData ;
 

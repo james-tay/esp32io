@@ -88,10 +88,27 @@ void f_handle_webrequest(int idx, char *method, char *uri)
     snprintf(s, l, "ec_web_idle_timeouts %lu\n", r->web_idle_timeouts) ;
     strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
 
+    // worker threads, iterate over them
+
+    for (int idx=0 ; idx < DEF_WORKER_THREADS ; idx++)
+    {
+      S_WorkerData *w = &G_runtime->worker[idx] ;
+      snprintf(s, l, "ec_worker_cmds_executed{id=\"%s\"} %lu\n",
+               w->name, w->cmds_executed) ;
+      strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+      snprintf(s, l, "ec_worker_total_busy_ms{id=\"%s\"} %lu\n",
+               w->name, w->total_busy_ms) ;
+      strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+      snprintf(s, l, "ec_worker_ts_last_cmd{id=\"%s\"} %lu\n",
+               w->name, w->ts_last_cmd) ;
+      strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+    }
+
     // we're done ! send off all our metrics
 
     write(r->webclients[idx].sd, r->metrics_buf, strlen(r->metrics_buf)) ;
     f_close_webclient(idx) ;
+    return ;
   }
 
   // if this is a REST request, parse the "cmd=..." into our "buf" and assign
@@ -108,7 +125,20 @@ void f_handle_webrequest(int idx, char *method, char *uri)
     G_runtime->worker[tid].caller = idx ;
     G_runtime->worker[tid].cmd = G_runtime->webclients[idx].buf ;
     xTaskNotifyGive(G_runtime->worker[tid].w_handle) ;
+    return ;
   }
+
+  // if we got here, that means the web client didn't call any valid endpoints
+
+  char *r1 = "HTTP/1.1 404 OK\n" ;
+  char *r2 = "Content-Type: text/plain\n" ;
+  char *r3 = "Connection: close\n\n" ;
+  char *r4 = "Invalid request\n" ;
+  write(G_runtime->webclients[idx].sd, r1, strlen(r1)) ;
+  write(G_runtime->webclients[idx].sd, r2, strlen(r2)) ;
+  write(G_runtime->webclients[idx].sd, r3, strlen(r3)) ;
+  write(G_runtime->webclients[idx].sd, r4, strlen(r4)) ;
+  f_close_webclient(idx) ;
 }
 
 /*
