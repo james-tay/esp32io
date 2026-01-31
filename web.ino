@@ -12,6 +12,127 @@ void f_close_webclient(int idx)
 }
 
 /*
+   This function is called from "f_urldecode()". Our job is to read a single
+   char and return its integer value.
+*/
+
+int f_hex_to_int (char c)
+{
+  if ((c >= '0') && (c <= '9')) return(c - '0') ;
+  if ((c >= 'a') && (c <= 'f')) return(c - 'a' + 10) ;
+  if ((c >= 'A') && (c <= 'F')) return(c - 'A' + 10) ;
+  return(0) ; // this should never happen
+}
+
+/*
+   This function is called from "f_handle_webrequest()". Our job is to examine
+   the supplied "buf" for URL encoded tokens (eg, "%aa") and convert them into
+   their original value. The supplied buffer is modified when we're done.
+*/
+
+void f_url_decode(char *src)
+{
+  char *dst = src ; // where we are up to in "src"
+  while (*src)
+  {
+    if (*src == '%')            // found a "%aa" to convert
+    {
+      if ((isxdigit(*(src+1))) && (isxdigit(*(src+2))))
+      {
+        *dst = (f_hex_to_int(*(src+1)) * 16) + f_hex_to_int(*(src+2)) ;
+        dst++ ; src = src + 3 ;
+      }
+      else // invalid sequence, just copy the '%' and continue
+      {
+        *dst = *src ; dst++ ; src++ ;
+      }
+    }
+    else
+    if (*src == '+')            // just a white space
+    {
+      *dst = ' ' ; dst++ ; src++ ;
+    }
+    else                        // no conversion needed
+    {
+      *dst = *src ; dst++ ; src++ ;
+    }
+  }
+  *dst = 0 ;                    // null-terminate early (potentially)
+}
+
+/*
+   This function is called from "f_handle_webrequest()" when it has been
+   determined that the webclient wants to scrape metrics. All this function
+   does is to walk through all available metrics and send them to the client.
+*/
+
+void f_handle_metrics(int idx)
+{
+  S_RuntimeData *r = G_runtime ; // macro since we're referencing it a lot
+  int l = BUF_LEN_LINE ;         // macro to shorten the subsequent statements
+  char s[l] ;                    // buffer to render a single metrics line
+
+  strcpy(r->metrics_buf, "HTTP/1.1 200 OK\n") ;
+  strcat(r->metrics_buf, "Content-Type: text/plain\n") ;
+  strcat(r->metrics_buf, "Connection: close\n\n") ;
+  write(r->webclients[idx].sd, r->metrics_buf, strlen(r->metrics_buf)) ;
+
+  // base system metrics
+
+  r->metrics_buf[0] = 0 ;
+  snprintf(s, l, "ec_uptime_secs %lu\n", millis() / 1000) ;
+  strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+  snprintf(s, l, "ec_chip_temperature %.2f\n", temperatureRead()) ;
+  strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+  snprintf(s, l, "ec_free_heap_bytes %ld\n", xPortGetFreeHeapSize()) ;
+  strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+
+  // serial port metrics
+
+  snprintf(s, l, "ec_serial_in_bytes %lu\n", r->serial_in_bytes) ;
+  strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+  snprintf(s, l, "ec_serial_commands %lu\n", r->serial_commands) ;
+  strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+  snprintf(s, l, "ec_serial_overruns %lu\n", r->serial_overruns) ;
+  strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+
+  // web server metrics
+
+  snprintf(s, l, "ec_web_accepts %lu\n", r->web_accepts) ;
+  strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+  snprintf(s, l, "ec_web_busy_rejects %lu\n", r->web_busy_rejects) ;
+  strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+  snprintf(s, l, "ec_web_requests_overrun %lu\n", r->web_requests_overrun) ;
+  strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+  snprintf(s, l, "ec_web_requests_received %lu\n", r->web_requests_received) ;
+  strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+  snprintf(s, l, "ec_web_invalid_requests %lu\n", r->web_invalid_requests) ;
+  strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+  snprintf(s, l, "ec_web_idle_timeouts %lu\n", r->web_idle_timeouts) ;
+  strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+
+  // worker threads, iterate over them
+
+  for (int idx=0 ; idx < DEF_WORKER_THREADS ; idx++)
+  {
+    S_WorkerData *w = &G_runtime->worker[idx] ;                 // just a macro
+    snprintf(s, l, "ec_worker_cmds_executed{id=\"%s\"} %lu\n",
+             w->name, w->cmds_executed) ;
+    strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+    snprintf(s, l, "ec_worker_total_busy_ms{id=\"%s\"} %lu\n",
+             w->name, w->total_busy_ms) ;
+    strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+    snprintf(s, l, "ec_worker_ts_last_cmd{id=\"%s\"} %lu\n",
+             w->name, w->ts_last_cmd) ;
+    strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+  }
+
+  // we're done ! send off all our metrics
+
+  write(r->webclients[idx].sd, r->metrics_buf, strlen(r->metrics_buf)) ;
+}
+
+/*
    This function is called from "f_handle_webclient()" when a complete HTTP
    request has been identified for the webclient "idx". This request is
    supplied to us as "method" (ie, "GET") and "uri" (ie, "/foo?key=value").
@@ -21,7 +142,7 @@ void f_close_webclient(int idx)
 
 void f_handle_webrequest(int idx, char *method, char *uri)
 {
-  // parse "uri" into "path" and "params" first
+  // parse "uri" temporarily into webserver's "url_path" and "url_params"
 
   int path_len ;
   char *p ;
@@ -44,69 +165,7 @@ void f_handle_webrequest(int idx, char *method, char *uri)
   if ((strcmp(method, "GET") == 0) &&
       (strcmp(G_runtime->url_path, "/metrics") == 0))
   {
-    int l = BUF_LEN_LINE ;      // macro to shorten the subsequent statements
-    char s[l] ;                 // buffer to render a single metrics line
-
-    S_RuntimeData *r = G_runtime ; // a macro since we're referencing it a lot
-
-    strcpy(r->metrics_buf, "HTTP/1.1 200 OK\n") ;
-    strcat(r->metrics_buf, "Content-Type: text/plain\n") ;
-    strcat(r->metrics_buf, "Connection: close\n\n") ;
-    write(r->webclients[idx].sd, r->metrics_buf, strlen(r->metrics_buf)) ;
-
-    // base system metrics
-
-    r->metrics_buf[0] = 0 ;
-    snprintf(s, l, "ec_uptime_secs %lu\n", millis() / 1000) ;
-    strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
-    snprintf(s, l, "ec_chip_temperature %.2f\n", temperatureRead()) ;
-    strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
-    snprintf(s, l, "ec_free_heap_bytes %ld\n", xPortGetFreeHeapSize()) ;
-    strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
-
-    // serial port metrics
-
-    snprintf(s, l, "ec_serial_in_bytes %lu\n", r->serial_in_bytes) ;
-    strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
-    snprintf(s, l, "ec_serial_commands %lu\n", r->serial_commands) ;
-    strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
-    snprintf(s, l, "ec_serial_overruns %lu\n", r->serial_overruns) ;
-    strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
-
-    // web server metrics
-
-    snprintf(s, l, "ec_web_accepts %lu\n", r->web_accepts) ;
-    strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
-    snprintf(s, l, "ec_web_busy_rejects %lu\n", r->web_busy_rejects) ;
-    strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
-    snprintf(s, l, "ec_web_requests_overrun %lu\n", r->web_requests_overrun) ;
-    strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
-    snprintf(s, l, "ec_web_requests_received %lu\n", r->web_requests_received) ;
-    strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
-    snprintf(s, l, "ec_web_invalid_requests %lu\n", r->web_invalid_requests) ;
-    strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
-    snprintf(s, l, "ec_web_idle_timeouts %lu\n", r->web_idle_timeouts) ;
-    strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
-
-    // worker threads, iterate over them
-
-    for (int idx=0 ; idx < DEF_WORKER_THREADS ; idx++)
-    {
-      S_WorkerData *w = &G_runtime->worker[idx] ;
-      snprintf(s, l, "ec_worker_cmds_executed{id=\"%s\"} %lu\n",
-               w->name, w->cmds_executed) ;
-      strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
-      snprintf(s, l, "ec_worker_total_busy_ms{id=\"%s\"} %lu\n",
-               w->name, w->total_busy_ms) ;
-      strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
-      snprintf(s, l, "ec_worker_ts_last_cmd{id=\"%s\"} %lu\n",
-               w->name, w->ts_last_cmd) ;
-      strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
-    }
-
-    // we're done ! send off all our metrics
-
-    write(r->webclients[idx].sd, r->metrics_buf, strlen(r->metrics_buf)) ;
+    f_handle_metrics(idx) ;
     f_close_webclient(idx) ;
     return ;
   }
@@ -118,7 +177,13 @@ void f_handle_webrequest(int idx, char *method, char *uri)
       (strcmp(G_runtime->url_path, "/v1") == 0) &&
       (strncmp(G_runtime->url_params, "cmd=", 4) == 0))
   {
+    // use our "buf" to prepare the "cmd" we'll hand over to worker thread
+
     strcpy(G_runtime->webclients[idx].buf, G_runtime->url_params+4) ;
+    f_url_decode(G_runtime->webclients[idx].buf) ;
+
+    // select a worker thread, get it prepared and then wake it up
+
     int tid = f_get_next_worker() ;
     G_runtime->webclients[idx].worker = tid ;
     G_runtime->webclients[idx].ts_start = millis() ;
