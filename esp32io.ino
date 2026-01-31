@@ -23,7 +23,8 @@
    thread creates a UDP server socket which binds to loopback. This socket
    descriptor is also monitored in the webserver thread's "select()". The
    worker thread then sends a UDP packet to signal the web server thread that
-   a result is ready.
+   a result is ready. This UDP packet's payload consists of a single byte,
+   which is the calling webclient "idx".
 
    In general, all internal threads (eg, webserver, workers, etc) will run on
    core-0. We'll try to reserve core-1 for user threads which might be time
@@ -74,6 +75,7 @@
 
 #define BUF_LEN_CONSOLE 256             // user command buffer on serial
 #define BUF_LEN_WEBCLIENT 256           // buffer for webclient HTTP header
+#define BUF_LEN_WEB_URL 256             // maximum allowed URL length
 #define BUF_LEN_METRICS 1024            // buffer for "/metrics" response
 #define BUF_LEN_WORKER_NAME 12          // how long worker thread name is
 #define BUF_LEN_WORKER_RESULT 256       // worker thread's "result_msg"
@@ -156,11 +158,12 @@ void f_serial_command()
   // if we got here, that means the worker thread woke us up
 
   unsigned long ts_end = millis() ;
-  Serial.printf("%s\r\ncode:%d latency:%dms\r\n",
+  Serial.printf("%s\r\ncode:%d time:%dms\r\n",
                 G_runtime->worker[tid].result_msg,
                 G_runtime->worker[tid].result_code,
                 ts_end - ts_start) ;
 
+  G_runtime->worker[tid].cmd = NULL ;
   G_runtime->worker[tid].state = W_IDLE ;               // release worker
 }
 

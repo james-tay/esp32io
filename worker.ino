@@ -25,5 +25,17 @@ void f_worker_thread(void *param)
     {
       xTaskNotifyGive(G_runtime->sconsole_handle) ;
     }
+    else                                        // notify a webclient via UDP
+    {
+      char payload = (char) G_runtime->worker[myidx].caller ;
+      struct sockaddr_in dest_addr ;
+
+      dest_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK) ;
+      dest_addr.sin_family = AF_INET;
+      dest_addr.sin_port = htons(DEF_WEBSERVER_EVENT_PORT) ;
+
+      sendto(G_runtime->notify_sd, &payload, 1, 0,
+             (struct sockaddr*)&dest_addr, sizeof(dest_addr)) ;
+    }
   }
 }

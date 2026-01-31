@@ -15,16 +15,38 @@ void f_close_webclient(int idx)
    This function is called from "f_handle_webclient()" when a complete HTTP
    request has been identified for the webclient "idx". This request is
    supplied to us as "method" (ie, "GET") and "uri" (ie, "/foo?key=value").
-   Our job is to parse "uri" and figure out what to do with it.
+   Our job is to parse "uri" into "path" and "params". Then we figure out what
+   to do with it.
 */
 
 void f_handle_webrequest(int idx, char *method, char *uri)
 {
-  #define LINE_LEN 128
-  char s[LINE_LEN] ;
+  // parse "uri" into "path" and "params" first
 
-  if ((strcmp(method, "GET") == 0) && (strcmp(uri, "/metrics") == 0))
+  int path_len ;
+  char *p ;
+
+  G_runtime->url_path[0] = 0 ;
+  G_runtime->url_params[0] = 0 ;
+  p = strchr(uri, '?') ;
+  if (p == NULL)                        // "path" only, no "params"
+    strcpy(G_runtime->url_path, uri) ;
+  else
   {
+    path_len = p - uri ;
+    strncpy(G_runtime->url_path, uri, path_len) ;
+    G_runtime->url_path[path_len] = 0 ;
+    strcpy(G_runtime->url_params, p+1) ;
+  }
+
+  // if prometheus is scraping, send metrics and close connection
+
+  if ((strcmp(method, "GET") == 0) &&
+      (strcmp(G_runtime->url_path, "/metrics") == 0))
+  {
+    #define LINE_LEN 128
+    char s[LINE_LEN] ; // a small buffer to render a single metrics line
+
     S_RuntimeData *r = G_runtime ; // a macro since we're referencing it a lot
 
     strcpy(r->metrics_buf, "HTTP/1.1 200 OK\n") ;
@@ -71,6 +93,21 @@ void f_handle_webrequest(int idx, char *method, char *uri)
 
     write(r->webclients[idx].sd, r->metrics_buf, strlen(r->metrics_buf)) ;
     f_close_webclient(idx) ;
+  }
+
+  // if this is a REST request, parse the "cmd=..." into our "buf" and assign
+  // the task to a worker thread.
+
+  if ((strcmp(method, "GET") == 0) &&
+      (strcmp(G_runtime->url_path, "/v1") == 0) &&
+      (strncmp(G_runtime->url_params, "cmd=", 4) == 0))
+  {
+    strcpy(G_runtime->webclients[idx].buf, G_runtime->url_params+4) ;
+    int tid = f_get_next_worker() ;
+    G_runtime->webclients[idx].worker = tid ;
+    G_runtime->worker[tid].caller = idx ;
+    G_runtime->worker[tid].cmd = G_runtime->webclients[idx].buf ;
+    xTaskNotifyGive(G_runtime->worker[tid].w_handle) ;
   }
 }
 
@@ -141,11 +178,46 @@ void f_handle_webclient(int idx)
         ((strcmp(proto, "HTTP/1.0")==0) || strcmp(proto, "HTTP/1.1")==0))
     {
       G_runtime->web_requests_received++ ;
-      f_handle_webrequest(idx, method, uri) ;
+      if (strlen(uri) < BUF_LEN_WEB_URL)
+        f_handle_webrequest(idx, method, uri) ;
+      else
+        G_runtime->web_requests_overrun++ ;     // "uri" too long
     }
     else
-      G_runtime->web_invalid_requests++ ;
+      G_runtime->web_invalid_requests++ ;       // unsupported HTTP protocol
   }
+}
+
+/*
+   This function is called from "f_webserver_thread()" when webclient "idx"
+   has a result from a worker thread. Our job is to return this result to
+   the HTTP client and then clean up the web client TCP session and return
+   the worker thread to a W_IDLE state.
+*/
+
+void f_handle_result(int idx)
+{
+  int tid = G_runtime->webclients[idx].worker ;
+
+  // first send our HTTP response header
+
+  char *resp_l1 = "HTTP/1.1 200 OK\n" ;
+  char *resp_l2 = "Content-Type: text/plain\n" ;
+  char *resp_l3 = "Connection: close\n\n" ;
+  write(G_runtime->webclients[idx].sd, resp_l1, strlen(resp_l1)) ;
+  write(G_runtime->webclients[idx].sd, resp_l2, strlen(resp_l2)) ;
+  write(G_runtime->webclients[idx].sd, resp_l3, strlen(resp_l3)) ;
+
+  // now send the worker thread's result
+
+  write(G_runtime->webclients[idx].sd,
+        G_runtime->worker[tid].result_msg,
+        strlen(G_runtime->worker[tid].result_msg)) ;
+  write(G_runtime->webclients[idx].sd, "\n", 1) ;
+  f_close_webclient(idx) ;
+
+  G_runtime->worker[tid].cmd = NULL ;
+  G_runtime->worker[tid].state = W_IDLE ;               //release worker
 }
 
 /*
@@ -165,13 +237,16 @@ void f_webserver_thread (void *param)
   for (idx=0 ; idx < DEF_WEBSERVER_MAX_CLIENTS ; idx++)
     G_runtime->webclients[idx].sd = -1 ;
 
-  // setup the UDP socket which listens for work thread events.
+  // "notify_sd" is a shared socket used by worker threads to send a packet.
+  // "event_sd" is used only by this thread to listen for incoming packets.
 
+  G_runtime->notify_sd = socket(AF_INET, SOCK_DGRAM, 0) ;
   int event_sd = socket(AF_INET, SOCK_DGRAM, 0) ;
   event_saddr.sin_family = AF_INET ;
   event_saddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK) ;
   event_saddr.sin_port = htons(DEF_WEBSERVER_EVENT_PORT) ;
-  bind(event_sd, (struct sockaddr*) &event_saddr, sizeof(event_saddr)) ;
+  if (bind(event_sd, (struct sockaddr*) &event_saddr, sizeof(event_saddr)) < 0)
+    Serial.printf("FATAL! bind() failed on loopback for event_sd.\r\n") ;
 
   // setup the TCP socket which listens for http clients.
 
@@ -236,6 +311,16 @@ void f_webserver_thread (void *param)
       for (idx=0 ; idx < DEF_WEBSERVER_MAX_CLIENTS ; idx++)
         if (FD_ISSET(G_runtime->webclients[idx].sd, &fds))
           f_handle_webclient(idx) ;             // found activity on webclient
+
+      if (FD_ISSET(event_sd, &fds))             // a worker thread is done
+      {
+        char payload ;
+        if ((read(event_sd, &payload, 1) == 1) &&
+            (payload >= 0) && (payload < DEF_WEBSERVER_MAX_CLIENTS))
+          f_handle_result((int) payload) ;
+        else
+          Serial.printf("FATAL! read() failed on event_sd.\r\n") ;
+      }
     }
   }
 }

@@ -6,6 +6,7 @@ struct web_client
 {
   int sd ;                              // "-1" when not connected
   unsigned long ts_last_activity ;      // millis() of last activity
+  int worker ;                          // ID of the assigned worker thread
   int buf_pos ;                         // current insertion point
   char buf[BUF_LEN_WEBCLIENT] ;         // buffer for webclient http header
 } ; typedef struct web_client S_WebClient ;
@@ -19,7 +20,7 @@ struct worker_data
   char name[BUF_LEN_WORKER_NAME] ;      // name in xTaskCreatePinnedToCore()
   TaskHandle_t w_handle ;               // from xTaskCreatePinnedToCore() call
 
-  int caller ;                          // -1=serial, otherwise webclient->sd
+  int caller ;                          // -1=serial, otherwise webclient "idx"
   char *cmd ;                           // command we're assigned to work on
   int result_code ;                     // 1=success, 0=error
   char result_msg[BUF_LEN_WORKER_RESULT] ;
@@ -43,6 +44,9 @@ struct runtime_data {
   // web server data structures
 
   S_WebClient webclients[DEF_WEBSERVER_MAX_CLIENTS] ;
+  int notify_sd ;
+  char url_path[BUF_LEN_WEB_URL] ;
+  char url_params[BUF_LEN_WEB_URL] ;
   char metrics_buf[BUF_LEN_METRICS] ;
 
   // worker threads
