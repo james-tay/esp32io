@@ -62,6 +62,7 @@
 #define DEF_THREAD_STACKSIZE 8192       // stack size when thread is created
 #define DEF_WEBSERVER_EVENT_PORT 65501  // UDP mesg indicating task completion
 #define DEF_WEBSERVER_MAX_CLIENTS 4     // maximum concurrent HTTP clients
+#define DEF_WEBSERVER_MAX_IDLE_MS 8000  // disconnect idle http clients
 #define DEF_WORKER_THREADS 4            // threads which execute commands
 #define DEF_WORKER_FIND_MAX_MS 500      // max delay between finding workers
 
@@ -79,6 +80,7 @@
 #define BUF_LEN_METRICS 1024            // buffer for "/metrics" response
 #define BUF_LEN_WORKER_NAME 12          // how long worker thread name is
 #define BUF_LEN_WORKER_RESULT 256       // worker thread's "result_msg"
+#define BUF_LEN_LINE 128                // generic : metrics, http response
 
 // worker thread states
 

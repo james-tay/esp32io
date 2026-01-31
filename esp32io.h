@@ -6,9 +6,11 @@ struct web_client
 {
   int sd ;                              // "-1" when not connected
   unsigned long ts_last_activity ;      // millis() of last activity
-  int worker ;                          // ID of the assigned worker thread
+  int worker ;                          // worker thread ID, -1 if unassigned
   int buf_pos ;                         // current insertion point
   char buf[BUF_LEN_WEBCLIENT] ;         // buffer for webclient http header
+  unsigned long ts_start ;              // time we hand off to worker thread
+  unsigned long ts_end ;                // time we're notified of our result
 } ; typedef struct web_client S_WebClient ;
 
 // This structure is used by a single worker thread.
@@ -68,6 +70,7 @@ struct runtime_data {
   unsigned long web_requests_overrun ;          // web client buffer overrun
   unsigned long web_requests_received ;         // successfully parsed requests
   unsigned long web_invalid_requests ;          // can't parse HTTP request
+  unsigned long web_idle_timeouts ;             // HTTP client idled too long
 
 } ; typedef struct runtime_data S_RuntimeData ;
 

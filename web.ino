@@ -44,8 +44,8 @@ void f_handle_webrequest(int idx, char *method, char *uri)
   if ((strcmp(method, "GET") == 0) &&
       (strcmp(G_runtime->url_path, "/metrics") == 0))
   {
-    #define LINE_LEN 128
-    char s[LINE_LEN] ; // a small buffer to render a single metrics line
+    int l = BUF_LEN_LINE ;      // macro to shorten the subsequent statements
+    char s[l] ;                 // buffer to render a single metrics line
 
     S_RuntimeData *r = G_runtime ; // a macro since we're referencing it a lot
 
@@ -57,36 +57,35 @@ void f_handle_webrequest(int idx, char *method, char *uri)
     // base system metrics
 
     r->metrics_buf[0] = 0 ;
-    snprintf(s, LINE_LEN, "ec_uptime_secs %lu\n", millis() / 1000) ;
+    snprintf(s, l, "ec_uptime_secs %lu\n", millis() / 1000) ;
     strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
-    snprintf(s, LINE_LEN, "ec_chip_temperature %.2f\n", temperatureRead()) ;
+    snprintf(s, l, "ec_chip_temperature %.2f\n", temperatureRead()) ;
     strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
-    snprintf(s, LINE_LEN, "ec_free_heap_bytes %ld\n", xPortGetFreeHeapSize()) ;
+    snprintf(s, l, "ec_free_heap_bytes %ld\n", xPortGetFreeHeapSize()) ;
     strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
 
     // serial port metrics
 
-    snprintf(s, LINE_LEN, "ec_serial_in_bytes %lu\n", r->serial_in_bytes) ;
+    snprintf(s, l, "ec_serial_in_bytes %lu\n", r->serial_in_bytes) ;
     strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
-    snprintf(s, LINE_LEN, "ec_serial_commands %lu\n", r->serial_commands) ;
+    snprintf(s, l, "ec_serial_commands %lu\n", r->serial_commands) ;
     strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
-    snprintf(s, LINE_LEN, "ec_serial_overruns %lu\n", r->serial_overruns) ;
+    snprintf(s, l, "ec_serial_overruns %lu\n", r->serial_overruns) ;
     strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
 
     // web server metrics
 
-    snprintf(s, LINE_LEN, "ec_web_accepts %lu\n", r->web_accepts) ;
+    snprintf(s, l, "ec_web_accepts %lu\n", r->web_accepts) ;
     strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
-    snprintf(s, LINE_LEN, "ec_web_busy_rejects %lu\n", r->web_busy_rejects) ;
+    snprintf(s, l, "ec_web_busy_rejects %lu\n", r->web_busy_rejects) ;
     strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
-    snprintf(s, LINE_LEN, "ec_web_requests_overrun %lu\n",
-             r->web_requests_overrun) ;
+    snprintf(s, l, "ec_web_requests_overrun %lu\n", r->web_requests_overrun) ;
     strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
-    snprintf(s, LINE_LEN, "ec_web_requests_received %lu\n",
-             r->web_requests_received) ;
+    snprintf(s, l, "ec_web_requests_received %lu\n", r->web_requests_received) ;
     strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
-    snprintf(s, LINE_LEN, "ec_web_invalid_requests %lu\n",
-             r->web_invalid_requests) ;
+    snprintf(s, l, "ec_web_invalid_requests %lu\n", r->web_invalid_requests) ;
+    strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+    snprintf(s, l, "ec_web_idle_timeouts %lu\n", r->web_idle_timeouts) ;
     strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
 
     // we're done ! send off all our metrics
@@ -105,6 +104,7 @@ void f_handle_webrequest(int idx, char *method, char *uri)
     strcpy(G_runtime->webclients[idx].buf, G_runtime->url_params+4) ;
     int tid = f_get_next_worker() ;
     G_runtime->webclients[idx].worker = tid ;
+    G_runtime->webclients[idx].ts_start = millis() ;
     G_runtime->worker[tid].caller = idx ;
     G_runtime->worker[tid].cmd = G_runtime->webclients[idx].buf ;
     xTaskNotifyGive(G_runtime->worker[tid].w_handle) ;
@@ -137,6 +137,7 @@ void f_handle_webclient(int idx)
   {
     client->buf_pos = client->buf_pos + amt ;
     client->buf[client->buf_pos] = 0 ;
+    client->ts_last_activity = millis() ;
 
     // have we received the full HTTP header ? Just check for 2x new lines
 
@@ -197,27 +198,33 @@ void f_handle_webclient(int idx)
 
 void f_handle_result(int idx)
 {
-  int tid = G_runtime->webclients[idx].worker ;
+  char line[BUF_LEN_LINE] ;
+  S_WebClient *w = &G_runtime->webclients[idx] ;
+
+  int tid = w->worker ;
+  w->ts_end = millis() ;
 
   // first send our HTTP response header
 
   char *resp_l1 = "HTTP/1.1 200 OK\n" ;
   char *resp_l2 = "Content-Type: text/plain\n" ;
   char *resp_l3 = "Connection: close\n\n" ;
-  write(G_runtime->webclients[idx].sd, resp_l1, strlen(resp_l1)) ;
-  write(G_runtime->webclients[idx].sd, resp_l2, strlen(resp_l2)) ;
-  write(G_runtime->webclients[idx].sd, resp_l3, strlen(resp_l3)) ;
+  write(w->sd, resp_l1, strlen(resp_l1)) ;
+  write(w->sd, resp_l2, strlen(resp_l2)) ;
+  write(w->sd, resp_l3, strlen(resp_l3)) ;
 
-  // now send the worker thread's result
+  // now send the worker thread's result to the HTTP client and clean up
 
-  write(G_runtime->webclients[idx].sd,
-        G_runtime->worker[tid].result_msg,
+  write(w->sd, G_runtime->worker[tid].result_msg,
         strlen(G_runtime->worker[tid].result_msg)) ;
-  write(G_runtime->webclients[idx].sd, "\n", 1) ;
+  snprintf(line, BUF_LEN_LINE, "\ncode:%d time:%dms\n",
+           G_runtime->worker[tid].result_code, w->ts_end - w->ts_start) ;
+  write(w->sd, line, strlen(line)) ;
   f_close_webclient(idx) ;
 
-  G_runtime->worker[tid].cmd = NULL ;
-  G_runtime->worker[tid].state = W_IDLE ;               //release worker
+  w->worker = -1 ;                              // mark as idle http client
+  G_runtime->worker[tid].cmd = NULL ;           // no more active command
+  G_runtime->worker[tid].state = W_IDLE ;       // release worker thread
 }
 
 /*
@@ -235,7 +242,10 @@ void f_webserver_thread (void *param)
   // initialize webclients
 
   for (idx=0 ; idx < DEF_WEBSERVER_MAX_CLIENTS ; idx++)
+  {
     G_runtime->webclients[idx].sd = -1 ;
+    G_runtime->webclients[idx].worker = -1 ;
+  }
 
   // "notify_sd" is a shared socket used by worker threads to send a packet.
   // "event_sd" is used only by this thread to listen for incoming packets.
@@ -300,7 +310,6 @@ void f_webserver_thread (void *param)
             G_runtime->web_accepts++ ;
             break ;
           }
-
         if (idx == DEF_WEBSERVER_MAX_CLIENTS)   // ops, no available slots
         {
           close(new_sd) ;
@@ -322,5 +331,22 @@ void f_webserver_thread (void *param)
           Serial.printf("FATAL! read() failed on event_sd.\r\n") ;
       }
     }
+
+    // check if connected clients have been idle for too long. webclients with
+    // no selected worker thread have "worker" set to -1.
+
+    unsigned long now = millis() ;
+    for (idx=0 ; idx < DEF_WEBSERVER_MAX_CLIENTS ; idx++)
+      if ((G_runtime->webclients[idx].worker < 0) &&
+          (G_runtime->webclients[idx].sd > 0))
+      {
+        unsigned long age = now - G_runtime->webclients[idx].ts_last_activity ;
+        if (age > DEF_WEBSERVER_MAX_IDLE_MS)
+        {
+          f_close_webclient(idx) ;
+          G_runtime->web_idle_timeouts++ ;
+        }
+      }
+
   }
 }
