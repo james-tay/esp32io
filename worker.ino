@@ -1,7 +1,9 @@
 /*
    This function is called from "f_worker_thread()" and supplied "idx" of the
    worker thread which called us. Our job is to parse/ execute our "cmd" and
-   write to our "result_msg" and "result_code".
+   write to our "result_msg" and "result_code". If we're calling another
+   function to do the work, then it falls to that function to write to our
+   "result_msg" and "result_code".
 */
 
 void f_action(int idx)
@@ -20,6 +22,20 @@ void f_action(int idx)
     else
       keyword[i] = G_runtime->worker[idx].cmd[i] ;
 
+  if (strcmp(keyword, "help") == 0)
+  {
+    strncpy(G_runtime->worker[idx].result_msg,
+      "set <key> <value>        set device configuration\r\n"
+      "version                  show software version and build time\r\n",
+      BUF_LEN_WORKER_RESULT) ;
+    G_runtime->worker[idx].result_code = 200 ;
+  }
+  else
+  if (strcmp(keyword, "set") == 0)
+  {
+    f_set_config(idx) ;
+  }
+  else
   if (strcmp(keyword, "version") == 0)
   {
     snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,

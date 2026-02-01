@@ -80,6 +80,8 @@
 #define BUF_LEN_METRICS 1024            // buffer for "/metrics" response
 #define BUF_LEN_WORKER_NAME 12          // how long worker thread name is
 #define BUF_LEN_WORKER_RESULT 256       // worker thread's "result_msg"
+#define BUF_LEN_WIFI_SSID 32            // maximum wifi SSID allowed length
+#define BUF_LEN_WIFI_PW 64              // maximum wifi password allowed
 #define BUF_LEN_LINE 128                // generic : metrics, http response
 
 // worker thread states

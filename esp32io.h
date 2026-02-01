@@ -23,7 +23,7 @@ struct worker_data
   TaskHandle_t w_handle ;               // from xTaskCreatePinnedToCore() call
   int caller ;                          // -1=serial, otherwise webclient "idx"
   char *cmd ;                           // command we're assigned to work on
-  int result_code ;                     // 1=success, 0=error
+  int result_code ;                     // we generally use HTTP status codes
   char result_msg[BUF_LEN_WORKER_RESULT] ;
 
   // performance metrics
@@ -35,9 +35,24 @@ struct worker_data
 
 } ; typedef struct worker_data S_WorkerData ;
 
-// This structure holds all global and shared runtime info
+// This structure holds all user configuration
+
+struct config_data {
+
+  // wifi configuration
+
+  char wifi_ssid[BUF_LEN_WIFI_SSID] ;
+  char wifi_pw[BUF_LEN_WIFI_PW] ;
+
+} ; typedef struct config_data S_ConfigData ;
+
+// This structure holds all global and shared runtime info, including config.
 
 struct runtime_data {
+
+  // our user configuration
+
+  S_ConfigData config ;
 
   // serial console data structures
 
