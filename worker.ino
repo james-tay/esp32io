@@ -1,7 +1,50 @@
+/*
+   This function is called from "f_worker_thread()" and supplied "idx" of the
+   worker thread which called us. Our job is to parse/ execute our "cmd" and
+   write to our "result_msg" and "result_code".
+*/
+
+void f_action(int idx)
+{
+
+  // commands are like a menu system. Identify the first "keyword" and then
+  // potentially farm it out to other functions which specialize in their
+  // implementation.
+
+  char keyword[BUF_LEN_LINE] ;
+  memset (keyword, 0, BUF_LEN_LINE) ;
+  for (int i=0 ; i < BUF_LEN_LINE-1 ; i++)
+    if ((G_runtime->worker[idx].cmd[i] == 0) ||
+        (G_runtime->worker[idx].cmd[i] == ' '))
+      break ;
+    else
+      keyword[i] = G_runtime->worker[idx].cmd[i] ;
+
+  if (strcmp(keyword, "version") == 0)
+  {
+    snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+             "esp32io git commit %s, built %s.", BUILD_COMMIT, BUILD_TIME) ;
+    G_runtime->worker[idx].result_code = 200 ;
+  }
+  else
+  {
+    strcpy(G_runtime->worker[idx].result_msg, "Invalid command.") ;
+    G_runtime->worker[idx].result_code = 404 ;
+  }
+}
+
+/*
+   This function forms the thread lifecycle of a single worker thread. We are
+   created from setup(). Our main loop starts with "ulTaskNotifyTake()" which
+   makes us block until we're told to wake up. At which time, we process the
+   supplied "cmd". When our work is complete, we write "result_msg" and
+   "result_code". Finally we notify our caller (be it the serial console
+   thread, or an HTTP webclient).
+*/
+
 void f_worker_thread(void *param)
 {
   int myidx = *((int*)param) ;
-
   Serial.printf("BOOT: %s thread started.\r\n",
                 G_runtime->worker[myidx].name) ;
 
@@ -10,17 +53,12 @@ void f_worker_thread(void *param)
     // sit here and wait until somebody tells us to do work
 
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY) ;
-    G_runtime->worker[myidx].state = W_BUSY ;
+
+    // at this point, we've been woken up, time to do work
+
     G_runtime->worker[myidx].ts_start = millis() ;
-
-    // put in dummy response to indicate we did work.
-
-    snprintf(G_runtime->worker[myidx].result_msg, BUF_LEN_WORKER_RESULT,
-             "%s cmd(%s)",
-             G_runtime->worker[myidx].name,
-             G_runtime->worker[myidx].cmd) ;
-
-    G_runtime->worker[myidx].result_code = 200 ;
+    G_runtime->worker[myidx].state = W_BUSY ;
+    f_action(myidx) ;
     G_runtime->worker[myidx].state = W_DONE ;
 
     // update our internal metrics to reflect work we just did

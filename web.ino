@@ -125,6 +125,9 @@ void f_handle_metrics(int idx)
     snprintf(s, l, "ec_worker_ts_last_cmd{id=\"%s\"} %lu\n",
              w->name, w->ts_last_cmd) ;
     strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+    snprintf(s, l, "ec_worker_state{id=\"%s\"} %lu\n",
+             w->name, w->state) ;
+    strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
   }
 
   // we're done ! send off all our metrics
