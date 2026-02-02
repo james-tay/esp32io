@@ -43,7 +43,7 @@ void f_set_config(int idx)
   }
   else                                  // user specified an invalid "key"
   {
-    strcpy(G_runtime->worker[idx].result_msg, "Invalid key.") ;
+    strcpy(G_runtime->worker[idx].result_msg, "Invalid key.\r\n") ;
     G_runtime->worker[idx].result_code = 400 ;
   }
 }

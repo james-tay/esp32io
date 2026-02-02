@@ -54,7 +54,7 @@ void f_action(int idx)
   strcpy(token_buf, G_runtime->worker[idx].cmd) ;
   if (f_parse(token_buf, tokens, 1) == 0)
   {
-    strcpy(G_runtime->worker[idx].result_msg, "Missing command") ;
+    strcpy(G_runtime->worker[idx].result_msg, "Missing command\r\n") ;
     G_runtime->worker[idx].result_code = 500 ;
     return ;
   }

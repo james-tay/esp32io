@@ -315,7 +315,7 @@ void f_handle_result(int idx)
 
   write(w->sd, G_runtime->worker[tid].result_msg,
         strlen(G_runtime->worker[tid].result_msg)) ;
-  snprintf(line, BUF_LEN_LINE, "\ncode:%d time:%dms\n",
+  snprintf(line, BUF_LEN_LINE, "[code:%d time:%dms]\n",
            G_runtime->worker[tid].result_code, w->ts_end - w->ts_start) ;
   write(w->sd, line, strlen(line)) ;
   f_close_webclient(idx) ;
@@ -426,7 +426,7 @@ void f_webserver_thread (void *param)
             (payload >= 0) && (payload < DEF_WEBSERVER_MAX_CLIENTS))
           f_handle_result((int) payload) ;
         else
-          Serial.printf("FATAL! read() failed on event_sd.\r\n") ;
+          Serial.printf("FATAL! read() failed on event_sd.\r\n") ; // very bad
       }
     }
 

@@ -162,7 +162,7 @@ void f_serial_command()
   // if we got here, that means the worker thread woke us up
 
   unsigned long ts_end = millis() ;
-  Serial.printf("%s\r\ncode:%d time:%dms\r\n",
+  Serial.printf("%s[code:%d time:%dms]\r\n",
                 G_runtime->worker[tid].result_msg,
                 G_runtime->worker[tid].result_code,
                 ts_end - ts_start) ;
