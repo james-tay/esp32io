@@ -7,12 +7,15 @@
 
 void f_wifi(int idx)
 {
+  char line[BUF_LEN_WIFI_SSID+32] ; // generic buffer for rendering a line
+
   // parse our "wifi..." command, or print help
 
   char *tokens[2], *cmd=NULL, *key=NULL ;
   if (f_parse(G_runtime->worker[idx].cmd, tokens, 2) != 2)
   {
     strncpy(G_runtime->worker[idx].result_msg,
+      "scan       search and report all Wifi SSIDs\r\n"
       "status     prints the current Wifi status\r\n",
       BUF_LEN_WORKER_RESULT) ;
     G_runtime->worker[idx].result_code = 400 ;
@@ -21,10 +24,29 @@ void f_wifi(int idx)
   cmd = tokens[0] ;
   key = tokens[1] ;
 
+  if (strcmp(key, "scan") == 0)
+  {
+    char ssid[BUF_LEN_WIFI_SSID] ;
+    int num_nets = WiFi.scanNetworks() ;
+
+    sprintf(G_runtime->worker[idx].result_msg, "Found %d wifi networks.\r\n",
+            num_nets) ;
+    for (int i=0 ; i < num_nets ; i++)
+    {
+      WiFi.SSID(i).toCharArray(ssid, BUF_LEN_WIFI_SSID-1) ;
+      sprintf(line, "%2d. ch %d, %d dBm [%s] %s\r\n",
+               i+1, WiFi.channel(i), WiFi.RSSI(i), ssid,
+               WiFi.BSSIDstr(i).c_str()) ;
+      strncat(G_runtime->worker[idx].result_msg, line,
+              BUF_LEN_WORKER_RESULT -
+              strlen(G_runtime->worker[idx].result_msg)) ;
+    }
+  }
+  else
   if (strcmp(key, "status") == 0)
   {
-    char line[BUF_LEN_WIFI_SSID+32], s[64] ;
-    unsigned char mac[6] ;
+    char s[40] ; // wifi status string
+    unsigned char mac[6] ; // our wifi mac address
 
     int wifi_status = WiFi.status() ;
     switch (wifi_status)

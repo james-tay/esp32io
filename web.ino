@@ -81,35 +81,35 @@ void f_handle_metrics(int idx)
 
   r->metrics_buf[0] = 0 ;
   snprintf(s, l, "ec_uptime_secs %lu\n", millis() / 1000) ;
-  strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+  strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
   snprintf(s, l, "ec_chip_temperature %.2f\n", temperatureRead()) ;
-  strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+  strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
   snprintf(s, l, "ec_free_heap_bytes %ld\n", xPortGetFreeHeapSize()) ;
-  strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+  strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
 
   // serial port metrics
 
   snprintf(s, l, "ec_serial_in_bytes %lu\n", r->serial_in_bytes) ;
-  strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+  strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
   snprintf(s, l, "ec_serial_commands %lu\n", r->serial_commands) ;
-  strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+  strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
   snprintf(s, l, "ec_serial_overruns %lu\n", r->serial_overruns) ;
-  strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+  strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
 
   // web server metrics
 
   snprintf(s, l, "ec_web_accepts %lu\n", r->web_accepts) ;
-  strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+  strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
   snprintf(s, l, "ec_web_busy_rejects %lu\n", r->web_busy_rejects) ;
-  strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+  strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
   snprintf(s, l, "ec_web_requests_overrun %lu\n", r->web_requests_overrun) ;
-  strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+  strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
   snprintf(s, l, "ec_web_requests_received %lu\n", r->web_requests_received) ;
-  strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+  strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
   snprintf(s, l, "ec_web_invalid_requests %lu\n", r->web_invalid_requests) ;
-  strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+  strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
   snprintf(s, l, "ec_web_idle_timeouts %lu\n", r->web_idle_timeouts) ;
-  strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+  strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
 
   // worker threads, iterate over them
 
@@ -118,16 +118,16 @@ void f_handle_metrics(int idx)
     S_WorkerData *w = &G_runtime->worker[idx] ;                 // just a macro
     snprintf(s, l, "ec_worker_cmds_executed{id=\"%s\"} %lu\n",
              w->name, w->cmds_executed) ;
-    strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+    strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
     snprintf(s, l, "ec_worker_total_busy_ms{id=\"%s\"} %lu\n",
              w->name, w->total_busy_ms) ;
-    strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+    strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
     snprintf(s, l, "ec_worker_ts_last_cmd{id=\"%s\"} %lu\n",
              w->name, w->ts_last_cmd) ;
-    strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+    strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
     snprintf(s, l, "ec_worker_state{id=\"%s\"} %lu\n",
              w->name, w->state) ;
-    strncat(r->metrics_buf, s, BUF_LEN_METRICS) ;
+    strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
   }
 
   // we're done ! send off all our metrics
