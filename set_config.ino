@@ -10,21 +10,8 @@ void f_set_config(int idx)
   // parse our "set..." command into fields "cmd", "key" and "value". We
   // expect that "cmd" is "set".
 
-  char *cmd=NULL, *key=NULL, *value=NULL, *p=NULL ;
-
-  cmd = strtok_r(G_runtime->worker[idx].cmd, " ", &p) ;
-  if ((cmd == NULL) || (strcmp(cmd, "set") != 0))
-  {
-    strcpy(G_runtime->worker[idx].result_msg, "Unexpected command") ;
-    G_runtime->worker[idx].result_code = 500 ;
-    return ;
-  }
-  key = strtok_r(NULL, " ", &p) ;
-  if (key != NULL)
-    value = p ; // ie, the rest of the string
-
-  if ((key == NULL) || (value == NULL) ||
-      (strlen(key) < 1) || (strlen(value) < 1)) // invalid input, print usage
+  char *tokens[3], *cmd=NULL, *key=NULL, *value=NULL ;
+  if (f_parse(G_runtime->worker[idx].cmd, tokens, 3) != 3)
   {
     strncpy(G_runtime->worker[idx].result_msg,
       "wifi_ssid  <value>\r\n"
@@ -33,6 +20,9 @@ void f_set_config(int idx)
     G_runtime->worker[idx].result_code = 400 ;
     return ;
   }
+  cmd = tokens[0] ;
+  key = tokens[1] ;
+  value = tokens[2] ;
 
   // if we made it here, then let's act on the supplied "key" and "value"
 
