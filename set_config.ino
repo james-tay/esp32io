@@ -27,7 +27,7 @@ void f_set_config(int idx)
   // if we made it here, then let's act on the supplied "key" and "value"
 
   snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
-           "Updating '%s' %d bytes", key, strlen(value)) ;
+           "Updating '%s' %d bytes\r\n", key, strlen(value)) ;
   G_runtime->worker[idx].result_code = 200 ;
 
   if (strcmp(key, "wifi_ssid") == 0)
@@ -38,8 +38,8 @@ void f_set_config(int idx)
   else
   if (strcmp(key, "wifi_pw") == 0)
   {
-    memset(G_runtime->config.wifi_ssid, 0, BUF_LEN_WIFI_SSID) ;
-    strncpy(G_runtime->config.wifi_ssid, value, BUF_LEN_WIFI_SSID-1) ;
+    memset(G_runtime->config.wifi_pw, 0, BUF_LEN_WIFI_SSID) ;
+    strncpy(G_runtime->config.wifi_pw, value, BUF_LEN_WIFI_SSID-1) ;
   }
   else                                  // user specified an invalid "key"
   {

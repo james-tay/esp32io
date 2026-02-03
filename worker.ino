@@ -77,18 +77,19 @@ void f_action(int idx)
   if (strcmp(keyword, "version") == 0)
   {
     snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
-             "esp32io git commit %s, built %s.", BUILD_COMMIT, BUILD_TIME) ;
+             "esp32io git commit %s, built %s.\r\n",
+             BUILD_COMMIT, BUILD_TIME) ;
     G_runtime->worker[idx].result_code = 200 ;
   }
   else
   if (strcmp(keyword, "wifi") == 0)
   {
-    f_wifi(idx) ;
+    f_wifi_cmd(idx) ;
   }
   else  // if we got here, that means the user gave us an invalid command.
   {
     snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
-             "Invalid command '%s'.", keyword) ;
+             "Invalid command '%s'.\r\n", keyword) ;
     G_runtime->worker[idx].result_code = 404 ;
   }
 }

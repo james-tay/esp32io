@@ -58,13 +58,14 @@
 
 #define DEF_SERIAL_BAUD	115200          // serial port (over USB)
 #define DEF_RGBLED_PIN 48               // RGB led on ESP32-S3 dev board
-#define DEF_RGBLED_BLINK_MS 10          // how long LED stays on
+#define DEF_RGBLED_BLINK_MS 5           // how long LED stays on
 #define DEF_THREAD_STACKSIZE 8192       // stack size when thread is created
 #define DEF_WEBSERVER_EVENT_PORT 65501  // UDP mesg indicating task completion
 #define DEF_WEBSERVER_MAX_CLIENTS 4     // maximum concurrent HTTP clients
 #define DEF_WEBSERVER_MAX_IDLE_MS 8000  // disconnect idle http clients
 #define DEF_WORKER_THREADS 4            // threads which execute commands
 #define DEF_WORKER_FIND_MAX_MS 500      // max delay between finding workers
+#define DEF_WIFI_BEGIN_WAIT_SECS 30     // how long to wait after WiFi.begin()
 
 // thread scheduling priorities
 
@@ -330,9 +331,13 @@ void loop ()
 {
   delay (10000) ;
 
-  // blink the LED to indicate we're alive.
+  // blink the LED to indicate we're alive. The color indicates wifi status.
 
-  neopixelWrite(DEF_RGBLED_PIN, 0, 0, 255) ;
+  if (WiFi.status() == WL_CONNECTED)
+    neopixelWrite(DEF_RGBLED_PIN, 0, 0, 255) ;
+  else
+    neopixelWrite(DEF_RGBLED_PIN, 255, 0, 0) ;
+
   delay (DEF_RGBLED_BLINK_MS) ;
   neopixelWrite(DEF_RGBLED_PIN, 0, 0, 0) ;
 }
