@@ -1,5 +1,3 @@
-#include "esp_partition.h"
-
 /*
    We're called when this worker thread's "cmd" is a "fs ...", thus our job
    is to perform various filesystem management functions. Note that it's our

@@ -64,6 +64,7 @@ void f_action(int idx)
   {
     strncpy(G_runtime->worker[idx].result_msg,
       "fs ...           filesystem management\r\n"
+      "reload           reload/reboot the device\r\n"
       "set ...          set device configuration\r\n"
       "uptime           show device uptime\r\n"
       "version          show software version and build time\r\n"
@@ -75,6 +76,11 @@ void f_action(int idx)
   if (strcmp(keyword, "fs") == 0)
   {
     f_fs_cmd(idx) ;
+  }
+  else
+  if (strcmp(keyword, "reload") == 0)
+  {
+    G_runtime->request_reload = 1 ;
   }
   else
   if (strcmp(keyword, "set") == 0)

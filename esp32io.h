@@ -54,6 +54,10 @@ struct config_data {
 
 struct runtime_data {
 
+  int fs_online ;                       // what SPIFFS.begin() returned
+  int request_reload ;                  // 0=normal, 1=reload
+  unsigned long ts_last_blink ;         // timestamp of last LED blink
+
   // our user configuration
 
   S_ConfigData config ;

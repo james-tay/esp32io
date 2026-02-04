@@ -59,6 +59,7 @@
 #define DEF_SERIAL_BAUD	115200          // serial port (over USB)
 #define DEF_RGBLED_PIN 48               // RGB led on ESP32-S3 dev board
 #define DEF_RGBLED_BLINK_MS 5           // how long LED stays on
+#define DEF_RGBLED_BLINK_INT_SEC 5      // how ofter to blink LED
 #define DEF_THREAD_STACKSIZE 8192       // stack size when thread is created
 #define DEF_WEBSERVER_EVENT_PORT 65501  // UDP mesg indicating task completion
 #define DEF_WEBSERVER_MAX_CLIENTS 4     // maximum concurrent HTTP clients
@@ -93,6 +94,7 @@
 #define W_DONE  3                       // caller reads results and sets W_IDLE
 
 #include <WiFi.h>
+#include <SPIFFS.h>
 
 #include "esp32io.h"
 
@@ -255,6 +257,8 @@ void setup ()
   // print out some info to show that we're booting up
 
   delay (1000) ;
+  if (SPIFFS.begin())
+    G_runtime->fs_online = 1 ;
   WiFi.mode(WIFI_STA) ;
   Serial.begin(DEF_SERIAL_BAUD) ;
   Serial.setTimeout(1000) ;
@@ -263,6 +267,7 @@ void setup ()
   Serial.printf("BOOT: G_runtime is %d bytes.\r\n", sizeof(S_RuntimeData)) ;
   Serial.printf("BOOT: Wifi mac: %s\r\n", WiFi.macAddress().c_str()) ;
   Serial.printf("BOOT: Chip temperature: %.2fC\r\n", temperatureRead()) ;
+  Serial.printf("BOOT: SPIFFS mounted: %d\r\n", G_runtime->fs_online) ;
 
   // if we have compile time wifi config, set it up now.
 
@@ -332,16 +337,31 @@ void setup ()
 
 void loop ()
 {
-  delay (10000) ;
+  unsigned long now = millis() ;
 
-  // blink the LED to indicate we're alive. The color indicates wifi status.
+  if (now > G_runtime->ts_last_blink + (DEF_RGBLED_BLINK_INT_SEC * 1000))
+  {
+    // blink the LED to indicate we're alive. The color indicates wifi status.
 
-  if (WiFi.status() == WL_CONNECTED)
-    neopixelWrite(DEF_RGBLED_PIN, 0, 0, 255) ;
-  else
+    if (WiFi.status() == WL_CONNECTED)
+      neopixelWrite(DEF_RGBLED_PIN, 0, 0, 255) ;
+    else
+      neopixelWrite(DEF_RGBLED_PIN, 255, 0, 0) ;
+    delay (DEF_RGBLED_BLINK_MS) ;
+    neopixelWrite(DEF_RGBLED_PIN, 0, 0, 0) ;
+
+    G_runtime->ts_last_blink += DEF_RGBLED_BLINK_INT_SEC * 1000 ;
+  }
+
+  if (G_runtime->request_reload)
+  {
+    // user requested a reload. Set LED to red until we die
+
     neopixelWrite(DEF_RGBLED_PIN, 255, 0, 0) ;
+    delay(1000) ;
+    ESP.restart() ;
+  }
 
-  delay (DEF_RGBLED_BLINK_MS) ;
-  neopixelWrite(DEF_RGBLED_PIN, 0, 0, 0) ;
+  delay (1000) ;
 }
 
