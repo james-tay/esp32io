@@ -63,15 +63,30 @@ void f_action(int idx)
   if (strcmp(keyword, "help") == 0)
   {
     strncpy(G_runtime->worker[idx].result_msg,
-      "set <key> <value>        set device configuration\r\n"
-      "version                  show software version and build time\r\n",
+      "fs ...           filesystem management\r\n"
+      "set ...          set device configuration\r\n"
+      "uptime           show device uptime\r\n"
+      "version          show software version and build time\r\n"
+      "wifi ...         wifi management\r\n",
       BUF_LEN_WORKER_RESULT) ;
     G_runtime->worker[idx].result_code = 200 ;
+  }
+  else
+  if (strcmp(keyword, "fs") == 0)
+  {
+    f_fs_cmd(idx) ;
   }
   else
   if (strcmp(keyword, "set") == 0)
   {
     f_set_config(idx) ;
+  }
+  else
+  if (strcmp(keyword, "uptime") == 0)
+  {
+    snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+             "uptime - %d secs\r\n", millis() / 1000) ;
+    G_runtime->worker[idx].result_code = 200 ;
   }
   else
   if (strcmp(keyword, "version") == 0)

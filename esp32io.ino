@@ -83,7 +83,7 @@
 #define BUF_LEN_WORKER_RESULT 2048      // worker thread's "result_msg" buffer
 #define BUF_LEN_WIFI_SSID 32            // maximum wifi SSID allowed length
 #define BUF_LEN_WIFI_PW 64              // maximum wifi password allowed
-#define BUF_LEN_LINE 128                // generic : metrics, http response
+#define BUF_LEN_LINE 128                // generic metrics, http response, etc
 
 // worker thread states
 
