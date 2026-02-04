@@ -44,6 +44,10 @@ struct config_data {
   char wifi_ssid[BUF_LEN_WIFI_SSID] ;
   char wifi_pw[BUF_LEN_WIFI_PW] ;
 
+  // misc settings
+
+  int debug ;                           // 0=none, 1=info
+
 } ; typedef struct config_data S_ConfigData ;
 
 // This structure holds all global and shared runtime info, including config.
@@ -82,7 +86,9 @@ struct runtime_data {
   unsigned long serial_in_bytes ;               // total bytes read
   unsigned long serial_commands ;               // total commands issued
   unsigned long serial_overruns ;               // serial buffer overrun
+  unsigned long serial_ts_last_read ;           // timestamp of last read()
   unsigned long web_accepts ;                   // clients assigned to a slot
+  unsigned long web_ts_last_accept ;            // time of last accept()
   unsigned long web_busy_rejects ;              // no available slots
   unsigned long web_requests_overrun ;          // web client buffer overrun
   unsigned long web_requests_received ;         // successfully parsed requests

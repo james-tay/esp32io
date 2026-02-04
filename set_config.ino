@@ -11,9 +11,10 @@ void f_set_config(int idx)
   // expect that "cmd" is "set".
 
   char *tokens[3], *cmd=NULL, *key=NULL, *value=NULL ;
-  if (f_parse(G_runtime->worker[idx].cmd, tokens, 3) != 3)
+  if (f_parse(G_runtime->worker[idx].cmd, tokens, 3) != 3)      // print help
   {
     strncpy(G_runtime->worker[idx].result_msg,
+      "debug      <value>\r\n"
       "wifi_ssid  <value>\r\n"
       "wifi_pw    <value>\r\n",
       BUF_LEN_WORKER_RESULT) ;
@@ -30,6 +31,13 @@ void f_set_config(int idx)
            "Updating '%s' %d bytes\r\n", key, strlen(value)) ;
   G_runtime->worker[idx].result_code = 200 ;
 
+  if (strcmp(key, "debug") == 0)
+  {
+    G_runtime->config.debug = atoi(value) ;
+    snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+             "Updating '%s' to %d.\r\n", key, G_runtime->config.debug) ;
+  }
+  else
   if (strcmp(key, "wifi_ssid") == 0)
   {
     memset(G_runtime->config.wifi_ssid, 0, BUF_LEN_WIFI_SSID) ;

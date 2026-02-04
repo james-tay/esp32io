@@ -193,7 +193,10 @@ void f_serial_console_thread(void *param)
     while (1)
     {
       char c = 0 ;                      // in case readBytes() times out
-      Serial.readBytes(&c, 1) ;         // block until a char arrives
+      Serial.readBytes(&c, 1) ;         // wait for char, or serial timeout
+      if (c != 0)
+        G_runtime->serial_ts_last_read = millis() ;
+
       if ((c == 8) || (c == 127))       // handle BS or DEL
       {
         if (G_runtime->serial_buf_pos > 0) // do we need to erase a char ?

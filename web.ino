@@ -91,6 +91,8 @@ void f_handle_metrics(int idx)
 
   snprintf(s, l, "ec_serial_in_bytes %lu\n", r->serial_in_bytes) ;
   strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
+  snprintf(s, l, "ec_serial_ts_last_read %lu\n", r->serial_ts_last_read) ;
+  strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
   snprintf(s, l, "ec_serial_commands %lu\n", r->serial_commands) ;
   strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
   snprintf(s, l, "ec_serial_overruns %lu\n", r->serial_overruns) ;
@@ -99,6 +101,8 @@ void f_handle_metrics(int idx)
   // web server metrics
 
   snprintf(s, l, "ec_web_accepts %lu\n", r->web_accepts) ;
+  strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
+  snprintf(s, l, "ec_web_ts_last_accept %lu\n", r->web_ts_last_accept) ;
   strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
   snprintf(s, l, "ec_web_busy_rejects %lu\n", r->web_busy_rejects) ;
   strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
@@ -392,8 +396,11 @@ void f_webserver_thread (void *param)
 
     if (select(max_fd + 1, &fds, NULL, NULL, &tv) > 0)
     {
+      unsigned long now = millis() ;
+
       if (FD_ISSET(listen_sd, &fds))            // new client connection
       {
+        G_runtime->web_ts_last_accept = now ;
         int new_sd = accept(listen_sd, NULL, NULL) ;
 
         // see if we have an available "webclients" slot for "new_sd"
@@ -404,7 +411,7 @@ void f_webserver_thread (void *param)
             G_runtime->webclients[idx].sd = new_sd ;
             G_runtime->webclients[idx].buf_pos = 0 ;
             G_runtime->webclients[idx].buf[0] = 0 ;
-            G_runtime->webclients[idx].ts_last_activity = millis() ;
+            G_runtime->webclients[idx].ts_last_activity = now ;
             G_runtime->web_accepts++ ;
             break ;
           }
