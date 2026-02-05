@@ -152,7 +152,7 @@ int f_get_next_worker()
 
 void f_serial_command()
 {
-  unsigned long ts_start = millis() ;
+  long long ts_start = esp_timer_get_time() ;
   int tid = f_get_next_worker() ;
   G_runtime->worker[tid].caller = -1 ;                  // identify as serial
   G_runtime->worker[tid].cmd = G_runtime->serial_buf ;  // current user command
@@ -164,11 +164,11 @@ void f_serial_command()
 
   // if we got here, that means the worker thread woke us up
 
-  unsigned long ts_end = millis() ;
+  long long ts_end = esp_timer_get_time() ;
   Serial.printf("%s[code:%d time:%dms]\r\n",
                 G_runtime->worker[tid].result_msg,
                 G_runtime->worker[tid].result_code,
-                ts_end - ts_start) ;
+                (ts_end - ts_start) / 1000) ;
 
   G_runtime->worker[tid].cmd = NULL ;
   G_runtime->worker[tid].state = W_IDLE ;               // release worker
@@ -197,7 +197,7 @@ void f_serial_console_thread(void *param)
       char c = 0 ;                      // in case readBytes() times out
       Serial.readBytes(&c, 1) ;         // wait for char, or serial timeout
       if (c != 0)
-        G_runtime->serial_ts_last_read = millis() ;
+        G_runtime->serial_ts_last_read = esp_timer_get_time() ;
 
       if ((c == 8) || (c == 127))       // handle BS or DEL
       {
@@ -337,9 +337,9 @@ void setup ()
 
 void loop ()
 {
-  unsigned long now = millis() ;
+  long long now = esp_timer_get_time() ;
 
-  if (now > G_runtime->ts_last_blink + (DEF_RGBLED_BLINK_INT_SEC * 1000))
+  if (now > G_runtime->ts_last_blink + (DEF_RGBLED_BLINK_INT_SEC * 1000000))
   {
     // blink the LED to indicate we're alive. The color indicates wifi status.
 
@@ -350,7 +350,7 @@ void loop ()
     delay (DEF_RGBLED_BLINK_MS) ;
     neopixelWrite(DEF_RGBLED_PIN, 0, 0, 0) ;
 
-    G_runtime->ts_last_blink += DEF_RGBLED_BLINK_INT_SEC * 1000 ;
+    G_runtime->ts_last_blink += DEF_RGBLED_BLINK_INT_SEC * 1000000 ;
   }
 
   if (G_runtime->request_reload)

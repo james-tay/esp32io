@@ -80,7 +80,7 @@ void f_handle_metrics(int idx)
   // base system metrics
 
   r->metrics_buf[0] = 0 ;
-  snprintf(s, l, "ec_uptime_secs %lu\n", millis() / 1000) ;
+  snprintf(s, l, "ec_uptime_secs %lld\n", esp_timer_get_time() / 1000000) ;
   strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
   snprintf(s, l, "ec_chip_temperature %.2f\n", temperatureRead()) ;
   strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
@@ -95,7 +95,7 @@ void f_handle_metrics(int idx)
 
   snprintf(s, l, "ec_serial_in_bytes %lu\n", r->serial_in_bytes) ;
   strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
-  snprintf(s, l, "ec_serial_ts_last_read %lu\n", r->serial_ts_last_read) ;
+  snprintf(s, l, "ec_serial_ts_last_read %lld\n", r->serial_ts_last_read) ;
   strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
   snprintf(s, l, "ec_serial_commands %lu\n", r->serial_commands) ;
   strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
@@ -106,7 +106,7 @@ void f_handle_metrics(int idx)
 
   snprintf(s, l, "ec_web_accepts %lu\n", r->web_accepts) ;
   strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
-  snprintf(s, l, "ec_web_ts_last_accept %lu\n", r->web_ts_last_accept) ;
+  snprintf(s, l, "ec_web_ts_last_accept %lld\n", r->web_ts_last_accept) ;
   strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
   snprintf(s, l, "ec_web_busy_rejects %lu\n", r->web_busy_rejects) ;
   strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
@@ -130,7 +130,7 @@ void f_handle_metrics(int idx)
     snprintf(s, l, "ec_worker_total_busy_ms{id=\"%s\"} %lu\n",
              w->name, w->total_busy_ms) ;
     strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
-    snprintf(s, l, "ec_worker_ts_last_cmd{id=\"%s\"} %lu\n",
+    snprintf(s, l, "ec_worker_ts_last_cmd{id=\"%s\"} %lld\n",
              w->name, w->ts_last_cmd) ;
     strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
     snprintf(s, l, "ec_worker_state{id=\"%s\"} %lu\n",
@@ -197,7 +197,7 @@ void f_handle_webrequest(int idx, char *method, char *uri)
 
     int tid = f_get_next_worker() ;
     G_runtime->webclients[idx].worker = tid ;
-    G_runtime->webclients[idx].ts_start = millis() ;
+    G_runtime->webclients[idx].ts_start = esp_timer_get_time() ;
     G_runtime->worker[tid].caller = idx ;
     G_runtime->worker[tid].cmd = G_runtime->webclients[idx].buf ;
     xTaskNotifyGive(G_runtime->worker[tid].w_handle) ;
@@ -243,7 +243,7 @@ void f_handle_webclient(int idx)
   {
     client->buf_pos = client->buf_pos + amt ;
     client->buf[client->buf_pos] = 0 ;
-    client->ts_last_activity = millis() ;
+    client->ts_last_activity = esp_timer_get_time() ;
 
     // have we received the full HTTP header ? Just check for 2x new lines
 
@@ -308,7 +308,7 @@ void f_handle_result(int idx)
   S_WebClient *w = &G_runtime->webclients[idx] ;
 
   int tid = w->worker ;
-  w->ts_end = millis() ;
+  w->ts_end = esp_timer_get_time() ;
 
   // first send our HTTP response header
 
@@ -324,7 +324,8 @@ void f_handle_result(int idx)
   write(w->sd, G_runtime->worker[tid].result_msg,
         strlen(G_runtime->worker[tid].result_msg)) ;
   snprintf(line, BUF_LEN_LINE, "[code:%d time:%dms]\n",
-           G_runtime->worker[tid].result_code, w->ts_end - w->ts_start) ;
+           G_runtime->worker[tid].result_code,
+           (w->ts_end - w->ts_start) / 1000) ;
   write(w->sd, line, strlen(line)) ;
   f_close_webclient(idx) ;
 
@@ -400,7 +401,7 @@ void f_webserver_thread (void *param)
 
     if (select(max_fd + 1, &fds, NULL, NULL, &tv) > 0)
     {
-      unsigned long now = millis() ;
+      long long now = esp_timer_get_time() ;
 
       if (FD_ISSET(listen_sd, &fds))            // new client connection
       {
@@ -444,18 +445,17 @@ void f_webserver_thread (void *param)
     // check if connected clients have been idle for too long. webclients with
     // no selected worker thread have "worker" set to -1.
 
-    unsigned long now = millis() ;
+    long long now = esp_timer_get_time() ;
     for (idx=0 ; idx < DEF_WEBSERVER_MAX_CLIENTS ; idx++)
       if ((G_runtime->webclients[idx].worker < 0) &&
           (G_runtime->webclients[idx].sd > 0))
       {
         unsigned long age = now - G_runtime->webclients[idx].ts_last_activity ;
-        if (age > DEF_WEBSERVER_MAX_IDLE_MS)
+        if (age > (DEF_WEBSERVER_MAX_IDLE_MS * 1000))
         {
           f_close_webclient(idx) ;
           G_runtime->web_idle_timeouts++ ;
         }
       }
-
   }
 }

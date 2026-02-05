@@ -91,7 +91,7 @@ void f_action(int idx)
   if (strcmp(keyword, "uptime") == 0)
   {
     snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
-             "uptime - %d secs\r\n", millis() / 1000) ;
+             "uptime - %lld secs\r\n", esp_timer_get_time() / 1000000) ;
     G_runtime->worker[idx].result_code = 200 ;
   }
   else
@@ -138,18 +138,20 @@ void f_worker_thread(void *param)
 
     // at this point, we've been woken up, time to do work
 
-    G_runtime->worker[myidx].ts_start = millis() ;
+    G_runtime->worker[myidx].ts_start = esp_timer_get_time() ;
     G_runtime->worker[myidx].state = W_BUSY ;
+    G_runtime->worker[myidx].result_msg[0] = 0 ;        // initialize result
+    G_runtime->worker[myidx].result_code = 0 ;          // initialize result
     f_action(myidx) ;
     G_runtime->worker[myidx].state = W_DONE ;
 
     // update our internal metrics to reflect work we just did
 
     G_runtime->worker[myidx].cmds_executed++ ;
-    G_runtime->worker[myidx].ts_last_cmd = millis() ;
+    G_runtime->worker[myidx].ts_last_cmd = esp_timer_get_time() ;
     G_runtime->worker[myidx].total_busy_ms +=
-      G_runtime->worker[myidx].ts_last_cmd -
-      G_runtime->worker[myidx].ts_start ;
+      (G_runtime->worker[myidx].ts_last_cmd -
+       G_runtime->worker[myidx].ts_start) / 1000 ;
 
     // notify the caller that we're done
 

@@ -5,12 +5,12 @@
 struct web_client
 {
   int sd ;                              // "-1" when not connected
-  unsigned long ts_last_activity ;      // millis() of last activity
+  long long ts_last_activity ;          // timestamp of last activity
   int worker ;                          // worker thread ID, -1 if unassigned
   int buf_pos ;                         // current insertion point
   char buf[BUF_LEN_WEBCLIENT] ;         // buffer for webclient http header
-  unsigned long ts_start ;              // time we hand off to worker thread
-  unsigned long ts_end ;                // time we're notified of our result
+  long long ts_start ;                  // time we hand off to worker thread
+  long long ts_end ;                    // time we're notified of our result
 } ; typedef struct web_client S_WebClient ;
 
 // This structure is used by a single worker thread.
@@ -30,8 +30,8 @@ struct worker_data
 
   unsigned long cmds_executed ;         // total number of commands executed
   unsigned long total_busy_ms ;         // total number of millisecs busy
-  unsigned long ts_start ;              // millis() of when we started work
-  unsigned long ts_last_cmd ;           // millis() of when we completed work
+  long long ts_start ;                  // timestamp of when we started work
+  long long ts_last_cmd ;               // timestamp of when we completed work
 
 } ; typedef struct worker_data S_WorkerData ;
 
@@ -56,7 +56,7 @@ struct runtime_data {
 
   int fs_online ;                       // what SPIFFS.begin() returned
   int request_reload ;                  // 0=normal, 1=reload
-  unsigned long ts_last_blink ;         // timestamp of last LED blink
+  long long ts_last_blink ;             // timestamp of last LED blink
 
   // our user configuration
 
@@ -90,9 +90,9 @@ struct runtime_data {
   unsigned long serial_in_bytes ;               // total bytes read
   unsigned long serial_commands ;               // total commands issued
   unsigned long serial_overruns ;               // serial buffer overrun
-  unsigned long serial_ts_last_read ;           // timestamp of last read()
+  long long serial_ts_last_read ;               // timestamp of last read()
   unsigned long web_accepts ;                   // clients assigned to a slot
-  unsigned long web_ts_last_accept ;            // time of last accept()
+  long long web_ts_last_accept ;                // time of last accept()
   unsigned long web_busy_rejects ;              // no available slots
   unsigned long web_requests_overrun ;          // web client buffer overrun
   unsigned long web_requests_received ;         // successfully parsed requests

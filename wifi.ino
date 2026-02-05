@@ -59,7 +59,7 @@ int f_wifi_connect(char *ssid, char *pw)
 {
   #define INVALID_RSSI -255
   int best_rssi=INVALID_RSSI, best_channel ;
-  char cur_ssid[BUF_LEN_WIFI_SSID], s[32] ;
+  char cur_ssid[BUF_LEN_WIFI_SSID] ;
   unsigned char best_bssid[6] ;
 
   int num_nets = WiFi.scanNetworks() ;
@@ -97,6 +97,7 @@ int f_wifi_connect(char *ssid, char *pw)
     wifi_status = WiFi.status() ;
     if (G_runtime->config.debug)
     {
+      char s[32] ;
       f_wifi_status_string(wifi_status, s) ;
       Serial.printf("DEBUG: f_wifi_connect() status:%s\r\n", s) ;
     }
@@ -120,7 +121,7 @@ int f_wifi_connect(char *ssid, char *pw)
 void f_wifi_status(int idx)
 {
   char s[40] ;                          // wifi status string
-  char line[BUF_LEN_WIFI_SSID+32] ;     // report one detected SSID
+  char line[BUF_LEN_WIFI_SSID+80] ;     // report one detected SSID
   unsigned char mac[6] ;                // our wifi mac address
 
   WiFi.macAddress(mac) ;
@@ -153,7 +154,7 @@ void f_wifi_status(int idx)
 
 void f_wifi_cmd(int idx)
 {
-  char line[BUF_LEN_WIFI_SSID+32] ; // generic buffer for rendering a line
+  char line[BUF_LEN_WIFI_SSID+80] ; // generic buffer for rendering a line
 
   // parse our "wifi..." command, or print help
 
@@ -224,12 +225,13 @@ void f_wifi_cmd(int idx)
     char ssid[BUF_LEN_WIFI_SSID] ;
     int num_nets = WiFi.scanNetworks() ;
 
-    sprintf(G_runtime->worker[idx].result_msg, "Found %d wifi networks.\r\n",
-            num_nets) ;
+    snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+             "Found %d wifi networks.\r\n", num_nets) ;
     for (int i=0 ; i < num_nets ; i++)
     {
       WiFi.SSID(i).toCharArray(ssid, BUF_LEN_WIFI_SSID-1) ;
-      sprintf(line, "%2d. ch %d, %d dBm [%s] %s\r\n",
+      ssid[BUF_LEN_WIFI_SSID-1] = 0 ;
+      snprintf(line, BUF_LEN_WIFI_SSID+80, "%2d. ch %d, %d dBm [%s] %s\r\n",
                i+1, WiFi.channel(i), WiFi.RSSI(i), ssid,
                WiFi.BSSIDstr(i).c_str()) ;
       strncat(G_runtime->worker[idx].result_msg, line,
