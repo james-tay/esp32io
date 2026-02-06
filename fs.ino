@@ -14,6 +14,7 @@ void f_fs_cmd(int idx)
   if (f_parse(G_runtime->worker[idx].cmd, tokens,4) == 1)
   {
     strncpy(G_runtime->worker[idx].result_msg,
+      "fs format                format the SPIFFS\r\n"
       "fs info                  show filesystem info\r\n"
       "fs ls                    list files\r\n"
       "fs partinfo              show partition layout\r\n"
@@ -26,7 +27,40 @@ void f_fs_cmd(int idx)
   cmd = tokens[0] ;
   key = tokens[1] ;
 
-  if (strcmp(key, "partinfo") == 0)
+  if (strcmp(key, "format") == 0)                               // "format"
+  {
+    if (SPIFFS.format())
+    {
+      strncpy(G_runtime->worker[idx].result_msg, "Success. Please reboot.\r\n",
+              BUF_LEN_WORKER_RESULT) ;
+      G_runtime->worker[idx].result_code = 200 ;
+    }
+    else
+    {
+      strncpy(G_runtime->worker[idx].result_msg, "Failed.\r\n",
+              BUF_LEN_WORKER_RESULT) ;
+      G_runtime->worker[idx].result_code = 500 ;
+    }
+  }
+  else
+  if (strcmp(key, "info") == 0)                                 // "info"
+  {
+    if (G_runtime->fs_online == 0)
+    {
+      strncpy(G_runtime->worker[idx].result_msg, "SPIFFS offline.\r\n",
+              BUF_LEN_WORKER_RESULT) ;
+      G_runtime->worker[idx].result_code = 400 ;
+    }
+    else
+    {
+      snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+               "totalBytes: %d\r\nusedBytes: %d\r\n",
+               SPIFFS.totalBytes(), SPIFFS.usedBytes()) ;
+      G_runtime->worker[idx].result_code = 200 ;
+    }
+  }
+  else
+  if (strcmp(key, "partinfo") == 0)                             // "partinfo"
   {
     esp_partition_iterator_t p_iter = esp_partition_find(
                                         ESP_PARTITION_TYPE_ANY,
@@ -47,6 +81,11 @@ void f_fs_cmd(int idx)
     }
     esp_partition_iterator_release(p_iter) ;
     G_runtime->worker[idx].result_code = 200 ;
+  }
+  else                                  // user specified an invalid "key"
+  {
+    strcpy(G_runtime->worker[idx].result_msg, "Invalid key.\r\n") ;
+    G_runtime->worker[idx].result_code = 400 ;
   }
 
 }
