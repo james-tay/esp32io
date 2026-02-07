@@ -30,6 +30,77 @@ void f_fs_partinfo(int idx)
 }
 
 /*
+   This function is caled from "f_fs_cmd()" by worker thread "idx". Our job
+   is to remove "filename". On completion, we'll set the worker thread's
+   "result_msg" and "result_code" accordingly.
+*/
+
+void f_fs_rm(int idx, char *filename)
+{
+  if (filename == NULL)
+  {
+    strncpy(G_runtime->worker[idx].result_msg, "Invalid usage.\r\n",
+            BUF_LEN_WORKER_RESULT) ;
+    G_runtime->worker[idx].result_code = 400 ;
+    return ;
+  }
+
+  if (SPIFFS.remove(filename))
+  {
+    snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+             "Removed '%s'.\r\n", filename) ;
+    G_runtime->worker[idx].result_code = 200 ;
+  }
+  else
+  {
+    snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+             "Cannot remove '%s'.\r\n", filename) ;
+    G_runtime->worker[idx].result_code = 500 ;
+  }
+}
+
+/*
+   This function is caled from "f_fs_cmd()" by worker thread "idx". Our job
+   is to write "content" into "filename". On completion, we'll set the worker
+   thread's "result_msg" and "result_code" accordingly.
+*/
+
+void f_fs_write(int idx, char *filename, char *content)
+{
+  if ((filename == NULL) || (content == NULL))
+  {
+    strncpy(G_runtime->worker[idx].result_msg, "Invalid usage.\r\n",
+            BUF_LEN_WORKER_RESULT) ;
+    G_runtime->worker[idx].result_code = 400 ;
+    return ;
+  }
+  if (strlen(filename) > DEF_MAX_FILENAME_LEN)
+  {
+    snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+            "Filename exceeds %d bytes.\r\n", DEF_MAX_FILENAME_LEN) ;
+    G_runtime->worker[idx].result_code = 400 ;
+    return ;
+  }
+
+  File f = SPIFFS.open(filename, "w") ;
+  if (f)
+  {
+    int amt = f.print(content) ;
+    f.close() ;
+    snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+             "Wrote %d out of %d bytes to '%s'.\r\n",
+             amt, strlen(content), filename) ;
+    G_runtime->worker[idx].result_code = 200 ;
+  }
+  else
+  {
+    snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+             "Cannot write to '%s'.\r\n", filename) ;
+    G_runtime->worker[idx].result_code = 500 ;
+  }
+}
+
+/*
    This is a convenience function which checks that the SPIFFS is mounted.
    If so, we return 1, and if it isn't then we write a message to this worker
    thread's "result_msg" and "result_code".
@@ -68,6 +139,7 @@ void f_fs_cmd(int idx)
       "fs ls                    list files\r\n"
       "fs partinfo              show partition layout\r\n"
       "fs read <file>           show contents of a file\r\n"
+      "fs rm <file>             removes a file\r\n"
       "fs write <file> <line>   write one line to a file\r\n",
       BUF_LEN_WORKER_RESULT) ;
     G_runtime->worker[idx].result_code = 400 ;
@@ -111,9 +183,16 @@ void f_fs_cmd(int idx)
       f_fs_partinfo(idx) ;
   }
   else
+  if (strcmp(key, "rm") == 0)
+  {
+    if (f_fs_online(idx))
+      f_fs_rm(idx, filename) ;
+  }
+  else
   if (strcmp(key, "write") == 0)                                // "write"
   {
-
+    if (f_fs_online(idx))
+      f_fs_write(idx, filename, content) ;
   }
   else                                  // user specified an invalid "key"
   {

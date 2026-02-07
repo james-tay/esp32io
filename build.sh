@@ -23,6 +23,7 @@ case $1 in
   arduino-cli upload -p $SERIAL_PORT -b esp32:esp32:esp32s3 --verify .
   ;;
 'upload_and_connect')
+  export TERM=vt100 # prevents "screen" from receiving scrollwheel events.
   arduino-cli upload -p $SERIAL_PORT -b esp32:esp32:esp32s3 --verify . && \
     screen $SERIAL_PORT 115200
   ;;

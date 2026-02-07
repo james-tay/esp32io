@@ -67,6 +67,7 @@
 #define DEF_WORKER_THREADS 4            // threads which execute commands
 #define DEF_WORKER_FIND_MAX_MS 500      // max delay between finding workers
 #define DEF_WIFI_BEGIN_WAIT_SECS 30     // how long to wait after WiFi.begin()
+#define DEF_MAX_FILENAME_LEN 30         // maximum filename length on SPIFFS
 
 // thread scheduling priorities
 
