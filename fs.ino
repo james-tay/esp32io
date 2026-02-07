@@ -1,4 +1,53 @@
 /*
+   This function is called from "f_fs_cmd()" when our job is to print out the
+   partition table. We're supplied the "idx" of our worker thread, thus our
+   responsibility is to write into its "result_msg" and "result_code".
+*/
+
+void f_fs_partinfo(int idx)
+{
+  char line[BUF_LEN_LINE] ;
+
+  esp_partition_iterator_t p_iter = esp_partition_find(
+                                      ESP_PARTITION_TYPE_ANY,
+                                      ESP_PARTITION_SUBTYPE_ANY,
+                                      NULL) ;
+  while (p_iter != NULL)
+  {
+    const esp_partition_t *p = esp_partition_get(p_iter) ;
+    snprintf(line, BUF_LEN_LINE,
+             "label:%-9s type:%d subtype:%-3d addr:0x%06x size:%lu KB\r\n",
+             p->label, p->type, p->subtype,
+             (unsigned long) p->address,
+             (unsigned long) p->size / 1024) ;
+    strncat(G_runtime->worker[idx].result_msg, line,
+            BUF_LEN_WORKER_RESULT -
+            strlen(G_runtime->worker[idx].result_msg)) ;
+    p_iter = esp_partition_next(p_iter) ;
+  }
+  esp_partition_iterator_release(p_iter) ;
+  G_runtime->worker[idx].result_code = 200 ;
+}
+
+/*
+   This is a convenience function which checks that the SPIFFS is mounted.
+   If so, we return 1, and if it isn't then we write a message to this worker
+   thread's "result_msg" and "result_code".
+*/
+
+int f_fs_online(int idx)
+{
+  if (G_runtime->fs_online == 0)
+  {
+    strncpy(G_runtime->worker[idx].result_msg, "SPIFFS offline.\r\n",
+            BUF_LEN_WORKER_RESULT) ;
+    G_runtime->worker[idx].result_code = 400 ;
+    return(0) ;
+  }
+  return(1) ;
+}
+
+/*
    We're called when this worker thread's "cmd" is a "fs ...", thus our job
    is to perform various filesystem management functions. Note that it's our
    responsibility to set the worker thread's "result_msg" and "result_code".
@@ -6,11 +55,11 @@
 
 void f_fs_cmd(int idx)
 {
-  char line[BUF_LEN_LINE] ;
+  // parse the "fs ..." command, or print help. Note that we prepare for the
+  // longest possible command, which is "fs write /file content", ie 4x tokens.
 
-  // parse the "fs ..." command, or print help
-
-  char *tokens[4], *cmd=NULL, *key=NULL ;
+  char *tokens[4], *cmd=NULL, *key=NULL, *filename=NULL, *content=NULL ;
+  memset(tokens, 0, sizeof(char*) * 4) ;
   if (f_parse(G_runtime->worker[idx].cmd, tokens,4) == 1)
   {
     strncpy(G_runtime->worker[idx].result_msg,
@@ -26,6 +75,8 @@ void f_fs_cmd(int idx)
   }
   cmd = tokens[0] ;
   key = tokens[1] ;
+  filename = tokens[2] ;
+  content = tokens[3] ;
 
   if (strcmp(key, "format") == 0)                               // "format"
   {
@@ -45,13 +96,7 @@ void f_fs_cmd(int idx)
   else
   if (strcmp(key, "info") == 0)                                 // "info"
   {
-    if (G_runtime->fs_online == 0)
-    {
-      strncpy(G_runtime->worker[idx].result_msg, "SPIFFS offline.\r\n",
-              BUF_LEN_WORKER_RESULT) ;
-      G_runtime->worker[idx].result_code = 400 ;
-    }
-    else
+    if (f_fs_online(idx))
     {
       snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
                "totalBytes: %d\r\nusedBytes: %d\r\n",
@@ -62,25 +107,13 @@ void f_fs_cmd(int idx)
   else
   if (strcmp(key, "partinfo") == 0)                             // "partinfo"
   {
-    esp_partition_iterator_t p_iter = esp_partition_find(
-                                        ESP_PARTITION_TYPE_ANY,
-                                        ESP_PARTITION_SUBTYPE_ANY,
-                                        NULL) ;
-    while (p_iter != NULL)
-    {
-      const esp_partition_t *p = esp_partition_get(p_iter) ;
-      snprintf(line, BUF_LEN_LINE,
-               "label:%-9s type:%d subtype:%-3d addr:0x%06x size:%lu KB\r\n",
-               p->label, p->type, p->subtype,
-               (unsigned long) p->address,
-               (unsigned long) p->size / 1024) ;
-      strncat(G_runtime->worker[idx].result_msg, line,
-              BUF_LEN_WORKER_RESULT -
-              strlen(G_runtime->worker[idx].result_msg)) ;
-      p_iter = esp_partition_next(p_iter) ;
-    }
-    esp_partition_iterator_release(p_iter) ;
-    G_runtime->worker[idx].result_code = 200 ;
+    if (f_fs_online(idx))
+      f_fs_partinfo(idx) ;
+  }
+  else
+  if (strcmp(key, "write") == 0)                                // "write"
+  {
+
   }
   else                                  // user specified an invalid "key"
   {
