@@ -1,4 +1,26 @@
 /*
+   This function is called from "f_fs_cmd()". We list the files in the SPIFFS.
+   Recall that this filesystem does not support directories.
+*/
+
+void f_fs_ls(int idx)
+{
+  char line[BUF_LEN_LINE] ;
+
+  File root = SPIFFS.open ("/", "r") ;
+  File f = root.openNextFile () ;
+  while (f)
+  {
+    snprintf (line, BUF_LEN_LINE, "%-8d %s\r\n", f.size(), f.name()) ;
+    strncat(G_runtime->worker[idx].result_msg, line,
+            BUF_LEN_WORKER_RESULT -
+            strlen(G_runtime->worker[idx].result_msg)) ;
+    f = root.openNextFile () ;
+  }
+  root.close () ;
+}
+
+/*
    This function is called from "f_fs_cmd()" when our job is to print out the
    partition table. We're supplied the "idx" of our worker thread, thus our
    responsibility is to write into its "result_msg" and "result_code".
@@ -26,6 +48,44 @@ void f_fs_partinfo(int idx)
     p_iter = esp_partition_next(p_iter) ;
   }
   esp_partition_iterator_release(p_iter) ;
+  G_runtime->worker[idx].result_code = 200 ;
+}
+
+/*
+   This function is called from "f_fs_cmd()". It reads a (potentially)
+   multi-line file, placing its contents in our worker thread's "result_msg".
+*/
+
+void f_fs_read(int idx, char *filename)
+{
+  File f = SPIFFS.open(filename, "r") ;
+  if (f.size() < 1)
+  {
+    snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+             "Cannot read file '%s'.\r\n", filename) ;
+    G_runtime->worker[idx].result_code = 500 ;
+    return ;
+  }
+
+  int total = 0 ;
+  int remainder = BUF_LEN_WORKER_RESULT - 3 ; // leave space for '\r\n'
+  while ((total < f.size()) && (remainder > 0))
+  {
+    int amt = f.readBytes(G_runtime->worker[idx].result_msg + total,
+                          remainder) ;
+    if (amt > 0)
+    {
+      total = total + amt ;
+      remainder = remainder - amt ;
+      G_runtime->worker[idx].result_msg[total] = 0 ;
+    }
+    else
+      break ;
+  }
+  f.close() ;
+  if (G_runtime->worker[idx].result_msg[total-1] != '\n')
+    strcat(G_runtime->worker[idx].result_msg, "\r\n") ;
+
   G_runtime->worker[idx].result_code = 200 ;
 }
 
@@ -78,6 +138,13 @@ void f_fs_write(int idx, char *filename, char *content)
   {
     snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
             "Filename exceeds %d bytes.\r\n", DEF_MAX_FILENAME_LEN) ;
+    G_runtime->worker[idx].result_code = 400 ;
+    return ;
+  }
+  if (filename[0] != '/')
+  {
+    strncpy(G_runtime->worker[idx].result_msg,
+            "Filenames must begin with '/'.\r\n", BUF_LEN_WORKER_RESULT) ;
     G_runtime->worker[idx].result_code = 400 ;
     return ;
   }
@@ -177,13 +244,25 @@ void f_fs_cmd(int idx)
     }
   }
   else
+  if (strcmp(key, "ls") == 0)                                   // "ls"
+  {
+    if (f_fs_online(idx))
+      f_fs_ls(idx) ;
+  }
+  else
   if (strcmp(key, "partinfo") == 0)                             // "partinfo"
   {
     if (f_fs_online(idx))
       f_fs_partinfo(idx) ;
   }
   else
-  if (strcmp(key, "rm") == 0)
+  if (strcmp(key, "read") == 0)
+  {
+    if (f_fs_online(idx))
+      f_fs_read(idx, filename) ;
+  }
+  else
+  if (strcmp(key, "rm") == 0)                                   // "rm"
   {
     if (f_fs_online(idx))
       f_fs_rm(idx, filename) ;
