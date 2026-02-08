@@ -11,7 +11,7 @@ void f_fs_ls(int idx)
   File f = root.openNextFile () ;
   while (f)
   {
-    snprintf (line, BUF_LEN_LINE, "%-8d %s\r\n", f.size(), f.name()) ;
+    snprintf (line, BUF_LEN_LINE, "%-8d /%s\r\n", f.size(), f.name()) ;
     strncat(G_runtime->worker[idx].result_msg, line,
             BUF_LEN_WORKER_RESULT -
             strlen(G_runtime->worker[idx].result_msg)) ;

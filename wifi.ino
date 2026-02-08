@@ -69,7 +69,7 @@ int f_wifi_connect(char *ssid, char *pw)
     if (strcmp(cur_ssid, ssid) == 0)
     {
       if (G_runtime->config.debug)
-        Serial.printf("DEBUG: f_wifi_connect() %s on chan:%d at %d dBm.\r\n",
+        Serial.printf("DEBUG: f_wifi_connect() found %s chan:%d, %d dBm.\r\n",
                       WiFi.BSSIDstr(i).c_str(), WiFi.channel(i), WiFi.RSSI(i)) ;
 
       if (WiFi.RSSI(i) > best_rssi)
@@ -202,8 +202,10 @@ void f_wifi_cmd(int idx)
       else                      // normal dBm is almost always negative
       {
         snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
-                 "Connected to '%s' at %d dBm.\r\n",
-                 G_runtime->config.wifi_ssid, result_dbm) ;
+                 "Connected to '%s' (%d dBm), IP %d.%d.%d.%d.\r\n",
+                 G_runtime->config.wifi_ssid, result_dbm,
+                 WiFi.localIP()[0], WiFi.localIP()[1],
+                 WiFi.localIP()[2], WiFi.localIP()[3]) ;
       }
     }
   }

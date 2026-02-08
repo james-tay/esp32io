@@ -3,8 +3,9 @@
 
    This program manages the operations on an ESP32. Commands can be sent to
    this device via serial console or via a web server over wifi. All commands
-   are sent to a queue, where a pool of worker threads evaluate them. Once each
-   task is completed, its response is delivered back to the user.
+   are then assigned to one of several worker threads. Once each command is
+   completed, its response is delivered back to the user. The serial console
+   baud rate is set to DEF_SERIAL_BAUD.
 
    INTERNAL THREADS
 
@@ -54,6 +55,22 @@
    "G_runtime->next_worker". If that worker is not W_IDLE, then we try the
    next one and so on. Each time we try another worker thread, we delay our
    attempt until we reach DEF_WORKER_FIND_MAX_MS.
+
+   CONFIGURATION
+
+   User configuration is consolidated in the S_ConfigData structure. During
+   initial boot up, various configuration files will be searched. If they
+   exist, then their value will be loaded into the runtime configuration. The
+   naming format for each of these files is
+     /<name>.cfg
+
+   For example, if the following files exist,
+     /wifi_ssid.cfg
+     /wifi_pw.cfg
+
+   Then they get loaded into,
+     G_runtime->config.wifi_ssid
+     G_runtime->config.wifi_pw
 */
 
 #define DEF_SERIAL_BAUD	115200          // serial port (over USB)
@@ -249,6 +266,8 @@ void f_serial_console_thread(void *param)
 
 void setup ()
 {
+  delay (1000) ;
+
   // initalize our runtime data structures
 
   G_runtime = (S_RuntimeData*) malloc(sizeof(S_RuntimeData)) ;
@@ -257,35 +276,20 @@ void setup ()
 
   // print out some info to show that we're booting up
 
-  delay (1000) ;
-  if (SPIFFS.begin())
-    G_runtime->fs_online = 1 ;
   WiFi.mode(WIFI_STA) ;
   Serial.begin(DEF_SERIAL_BAUD) ;
   Serial.setTimeout(1000) ;
   Serial.printf("\r\nBOOT: Running esp32io git commit %s, built %s.\r\n",
                 BUILD_COMMIT, BUILD_TIME) ;
+
+  if (SPIFFS.begin())
+    G_runtime->fs_online = 1 ;
   Serial.printf("BOOT: G_runtime is %d bytes.\r\n", sizeof(S_RuntimeData)) ;
   Serial.printf("BOOT: Wifi mac: %s\r\n", WiFi.macAddress().c_str()) ;
   Serial.printf("BOOT: Chip temperature: %.2fC\r\n", temperatureRead()) ;
   Serial.printf("BOOT: SPIFFS mounted: %d\r\n", G_runtime->fs_online) ;
-
-  // if we have compile time wifi config, set it up now.
-
-  #if defined(WIFI_SSID) && defined(WIFI_PW)
-    Serial.printf("BOOT: Connecting to %s.", WIFI_SSID) ;
-    WiFi.begin(WIFI_SSID, WIFI_PW) ;
-    for (int retry=0 ; retry < 30 ; retry++)
-    {
-      if (WiFi.status() == WL_CONNECTED)
-        break ;
-      Serial.printf(".") ;
-      delay(1000) ;
-    }
-    Serial.printf("\r\nBOOT: IP: %d.%d.%d.%d\r\n",
-                  WiFi.localIP()[0], WiFi.localIP()[1],
-                  WiFi.localIP()[2], WiFi.localIP()[3]) ;
-  #endif
+  if (G_runtime->fs_online)
+    f_load_config() ;
 
   // start the "f_serial_console_thread"
 
@@ -323,6 +327,23 @@ void setup ()
       DEF_WORKER_PRIORITY,              // priority (higher is more important)
       &G_runtime->worker[i].w_handle,   // task handle
       0) ;                              // core ID
+  }
+
+  // our first choice is user configured wifi, if absent use compile time
+  // credentials if present
+
+  char *wifi_ssid = G_runtime->config.wifi_ssid ;
+  char *wifi_pw = G_runtime->config.wifi_pw ;
+
+  #if defined(WIFI_SSID) && defined(WIFI_PW)
+    if ((wifi_ssid[0] == 0) || (wifi_pw[0] == 0))
+      { wifi_ssid = WIFI_SSID ; wifi_pw = WIFI_PW ; }
+  #endif
+
+  if ((strlen(wifi_ssid) > 0) && (strlen(wifi_pw) > 0))
+  {
+    Serial.printf("BOOT: Connecting to '%s'.\r\n", wifi_ssid) ;
+    f_wifi_connect(wifi_ssid, wifi_pw) ;
   }
 
   // blink RGB LED to indicate we've completed initialization
