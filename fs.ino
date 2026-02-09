@@ -18,6 +18,28 @@ void f_fs_ls(int idx)
     f = root.openNextFile () ;
   }
   root.close () ;
+  G_runtime->worker[idx].result_code = 200 ;
+}
+
+/*
+   This function is called from "f_fs_cmd()". Our job is to try renaming "src"
+   to "dst".
+*/
+
+void f_fs_mv(int idx, char *src, char *dst)
+{
+  if (SPIFFS.rename(src, dst))
+  {
+    snprintf (G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+              "Moved %s->%s.\r\n", src, dst) ;
+    G_runtime->worker[idx].result_code = 200 ;
+  }
+  else
+  {
+    snprintf (G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+              "Cannot move %s->%s.\r\n", src, dst) ;
+    G_runtime->worker[idx].result_code = 500 ;
+  }
 }
 
 /*
@@ -204,6 +226,7 @@ void f_fs_cmd(int idx)
       "fs format                format the SPIFFS\r\n"
       "fs info                  show filesystem info\r\n"
       "fs ls                    list files\r\n"
+      "fs mv <src> <dst>        move (rename) a file\r\n"
       "fs partinfo              show partition layout\r\n"
       "fs read <file>           show contents of a file\r\n"
       "fs rm <file>             removes a file\r\n"
@@ -250,13 +273,19 @@ void f_fs_cmd(int idx)
       f_fs_ls(idx) ;
   }
   else
+  if (strcmp(key, "mv") == 0)                                   // "mv"
+  {
+    if (f_fs_online(idx))
+      f_fs_mv(idx, filename, content) ;
+  }
+  else
   if (strcmp(key, "partinfo") == 0)                             // "partinfo"
   {
     if (f_fs_online(idx))
       f_fs_partinfo(idx) ;
   }
   else
-  if (strcmp(key, "read") == 0)
+  if (strcmp(key, "read") == 0)                                 // "read"
   {
     if (f_fs_online(idx))
       f_fs_read(idx, filename) ;
@@ -278,5 +307,4 @@ void f_fs_cmd(int idx)
     strcpy(G_runtime->worker[idx].result_msg, "Invalid key.\r\n") ;
     G_runtime->worker[idx].result_code = 400 ;
   }
-
 }

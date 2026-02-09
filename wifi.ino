@@ -62,6 +62,7 @@ int f_wifi_connect(char *ssid, char *pw)
   char cur_ssid[BUF_LEN_WIFI_SSID] ;
   unsigned char best_bssid[6] ;
 
+  G_runtime->wifi_connects++ ;
   int num_nets = WiFi.scanNetworks() ;
   for (int i=0 ; i < num_nets ; i++)
   {

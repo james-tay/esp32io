@@ -84,6 +84,7 @@
 #define DEF_WORKER_THREADS 4            // threads which execute commands
 #define DEF_WORKER_FIND_MAX_MS 500      // max delay between finding workers
 #define DEF_WIFI_BEGIN_WAIT_SECS 30     // how long to wait after WiFi.begin()
+#define DEF_WIFI_CHK_INT_SECS 30        // how often to check wifi status
 #define DEF_MAX_FILENAME_LEN 30         // maximum filename length on SPIFFS
 
 // thread scheduling priorities
@@ -193,6 +194,17 @@ void f_serial_command()
 }
 
 /*
+   This function is called when data is available on the serial port for us.
+   The callback was setup in "f_serial_console_thread()".
+*/
+
+void f_on_serial_recv()
+{
+  static BaseType_t priority = pdFALSE ;
+  xSemaphoreGiveFromISR(G_runtime->L_serial_in, &priority) ;
+}
+
+/*
    This function forms the thread life cycle of the serial console thread. We
    concern ourselves with interacting with bytes on the serial port. When a
    complete command is accumulated in "G_runtime->serial_buf", we hand off the
@@ -202,6 +214,12 @@ void f_serial_command()
 void f_serial_console_thread(void *param)
 {
   delay(1000) ; // wait for setup() to complete
+
+  // set a callback unlock "L_serial_in" when data arrives on the serial port
+  Serial.onReceive(f_on_serial_recv) ;
+
+  // our main loop ... try reading commands from the serial port.
+
   while (1)
   {
     G_runtime->serial_buf_pos = 0 ;
@@ -212,6 +230,14 @@ void f_serial_console_thread(void *param)
 
     while (1)
     {
+      // if there's no data to read, block until "L_serial_in" is released
+
+      if (Serial.available() == 0)
+        xSemaphoreTake(G_runtime->L_serial_in, portMAX_DELAY) ;
+      G_runtime->serial_ts_last_loop = esp_timer_get_time() ;
+
+      // if we got here, there's something to read on the serial port
+
       char c = 0 ;                      // in case readBytes() times out
       Serial.readBytes(&c, 1) ;         // wait for char, or serial timeout
       if (c != 0)
@@ -273,6 +299,7 @@ void setup ()
   G_runtime = (S_RuntimeData*) malloc(sizeof(S_RuntimeData)) ;
   memset(G_runtime, 0, sizeof(S_RuntimeData)) ;
   G_runtime->L_worker = xSemaphoreCreateMutex() ;
+  G_runtime->L_serial_in = xSemaphoreCreateBinary() ;
 
   // print out some info to show that we're booting up
 
@@ -373,6 +400,15 @@ void loop ()
     neopixelWrite(DEF_RGBLED_PIN, 0, 0, 0) ;
 
     G_runtime->ts_last_blink += DEF_RGBLED_BLINK_INT_SEC * 1000000 ;
+  }
+
+  if (now > G_runtime->ts_last_wifi_check + (DEF_WIFI_CHK_INT_SECS * 1000000))
+  {
+    if ((WiFi.status() != WL_CONNECTED) &&
+        (strlen(G_runtime->config.wifi_ssid) > 0) &&
+        (strlen(G_runtime->config.wifi_pw) > 0))
+      f_wifi_connect(G_runtime->config.wifi_ssid, G_runtime->config.wifi_pw) ;
+    G_runtime->ts_last_wifi_check = now ;
   }
 
   if (G_runtime->request_reload)

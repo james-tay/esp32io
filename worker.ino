@@ -64,6 +64,7 @@ void f_action(int idx)
   {
     strncpy(G_runtime->worker[idx].result_msg,
       "fs ...           filesystem management\r\n"
+      "ps               threads cpu time consumed\r\n"
       "reload           reload/reboot the device\r\n"
       "set ...          set device configuration\r\n"
       "uptime           show device uptime\r\n"
@@ -73,29 +74,35 @@ void f_action(int idx)
     G_runtime->worker[idx].result_code = 200 ;
   }
   else
-  if (strcmp(keyword, "fs") == 0)
+  if (strcmp(keyword, "fs") == 0)                               // fs
   {
     f_fs_cmd(idx) ;
   }
   else
-  if (strcmp(keyword, "reload") == 0)
+  if (strcmp(keyword, "ps") == 0)                               // ps
+  {
+    vTaskGetRunTimeStats(G_runtime->worker[idx].result_msg) ;
+    G_runtime->worker[idx].result_code = 200 ;
+  }
+  else
+  if (strcmp(keyword, "reload") == 0)                           // reload
   {
     G_runtime->request_reload = 1 ;
   }
   else
-  if (strcmp(keyword, "set") == 0)
+  if (strcmp(keyword, "set") == 0)                              // set
   {
     f_set_config(idx) ;
   }
   else
-  if (strcmp(keyword, "uptime") == 0)
+  if (strcmp(keyword, "uptime") == 0)                           // uptime
   {
     snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
              "uptime - %lld secs\r\n", esp_timer_get_time() / 1000000) ;
     G_runtime->worker[idx].result_code = 200 ;
   }
   else
-  if (strcmp(keyword, "version") == 0)
+  if (strcmp(keyword, "version") == 0)                          // version
   {
     snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
              "esp32io git commit %s, built %s.\r\n",
@@ -103,7 +110,7 @@ void f_action(int idx)
     G_runtime->worker[idx].result_code = 200 ;
   }
   else
-  if (strcmp(keyword, "wifi") == 0)
+  if (strcmp(keyword, "wifi") == 0)                             // wifi
   {
     f_wifi_cmd(idx) ;
   }

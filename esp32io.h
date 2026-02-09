@@ -54,13 +54,16 @@ struct config_data {
 
 struct runtime_data {
 
-  int fs_online ;                       // what SPIFFS.begin() returned
-  int request_reload ;                  // 0=normal, 1=reload
-  long long ts_last_blink ;             // timestamp of last LED blink
-
   // our user configuration
 
   S_ConfigData config ;
+
+  // general runtime status
+
+  int fs_online ;                       // what SPIFFS.begin() returned
+  int request_reload ;                  // 0=normal, 1=reload
+  long long ts_last_blink ;             // timestamp of last LED blink
+  long long ts_last_wifi_check ;        // timestamp of last wifi status check
 
   // serial console data structures
 
@@ -84,12 +87,14 @@ struct runtime_data {
   // acquire these locks before interacting with the specified resources
 
   SemaphoreHandle_t L_worker ;          // "next_worker"
+  SemaphoreHandle_t L_serial_in ;       // unlocked when serial data arrives
 
   // various performance metrics
 
   unsigned long serial_in_bytes ;               // total bytes read
   unsigned long serial_commands ;               // total commands issued
   unsigned long serial_overruns ;               // serial buffer overrun
+  long long serial_ts_last_loop ;               // timestamp of last loop run
   long long serial_ts_last_read ;               // timestamp of last read()
   unsigned long web_accepts ;                   // clients assigned to a slot
   long long web_ts_last_accept ;                // time of last accept()
@@ -98,6 +103,7 @@ struct runtime_data {
   unsigned long web_requests_received ;         // successfully parsed requests
   unsigned long web_invalid_requests ;          // can't parse HTTP request
   unsigned long web_idle_timeouts ;             // HTTP client idled too long
+  unsigned long wifi_connects ;                 // calls to f_wifi_connect()
 
 } ; typedef struct runtime_data S_RuntimeData ;
 

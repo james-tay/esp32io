@@ -86,6 +86,8 @@ void f_handle_metrics(int idx)
   strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
   snprintf(s, l, "ec_free_heap_bytes %ld\n", xPortGetFreeHeapSize()) ;
   strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
+  snprintf(s, l, "ec_wifi_connects %ld\n", r->wifi_connects) ;
+  strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
   snprintf(s, l, "ec_wifi_channel %d\n", WiFi.channel()) ;
   strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
   snprintf(s, l, "ec_wifi_rssi %d\n", WiFi.RSSI()) ;
@@ -94,6 +96,8 @@ void f_handle_metrics(int idx)
   // serial port metrics
 
   snprintf(s, l, "ec_serial_in_bytes %lu\n", r->serial_in_bytes) ;
+  strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
+  snprintf(s, l, "ec_serial_ts_last_loop %lld\n", r->serial_ts_last_loop) ;
   strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
   snprintf(s, l, "ec_serial_ts_last_read %lld\n", r->serial_ts_last_read) ;
   strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
