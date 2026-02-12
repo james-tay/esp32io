@@ -91,6 +91,8 @@ struct runtime_data {
 
   // various performance metrics
 
+  unsigned long ntp_updates ;                   // total successful ntp syncs
+  long long ts_last_ntp_sync ;                  // timestamp of last ntp sync
   unsigned long serial_in_bytes ;               // total bytes read
   unsigned long serial_commands ;               // total commands issued
   unsigned long serial_overruns ;               // serial buffer overrun

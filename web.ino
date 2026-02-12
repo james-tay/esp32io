@@ -86,6 +86,10 @@ void f_handle_metrics(int idx)
   strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
   snprintf(s, l, "ec_free_heap_bytes %ld\n", xPortGetFreeHeapSize()) ;
   strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
+  snprintf(s, l, "ec_ntp_updates %lu\n", r->ntp_updates) ;
+  strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
+  snprintf(s, l, "ec_ts_last_ntp_sync %llu\n", r->ts_last_ntp_sync) ;
+  strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
   snprintf(s, l, "ec_wifi_connects %ld\n", r->wifi_connects) ;
   strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
   snprintf(s, l, "ec_wifi_channel %d\n", WiFi.channel()) ;

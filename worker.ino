@@ -36,6 +36,32 @@ int f_parse(char *src, char **tokens, int max_tokens)
 }
 
 /*
+   This function is called from "f_action()", our job is to print our current
+   uptime.
+*/
+
+void f_uptime_cmd(int idx)
+{
+  char line[BUF_LEN_LINE] ;
+  struct tm timeinfo ;          // captures current timestamp
+  struct timeval tv ;           // captures microsec resolution
+
+  strncpy(line, "clock not ntp synced", BUF_LEN_LINE) ;
+  if ((G_runtime->ntp_updates > 0) && (getLocalTime(&timeinfo)))
+  {
+    gettimeofday(&tv, NULL) ;
+    snprintf(line, BUF_LEN_LINE-1, "%04d%02d%02d-%02d%02d.%03d UTC",
+             timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
+             timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
+             tv.tv_usec / 1000) ;
+  }
+
+  snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+           "uptime %lld secs, %s\r\n", esp_timer_get_time() / 1000000, line) ;
+  G_runtime->worker[idx].result_code = 200 ;
+}
+
+/*
    This function is called from "f_worker_thread()" and supplied "idx" of the
    worker thread which called us. Our job is to parse/ execute our "cmd" and
    write to our "result_msg" and "result_code". If we're calling another
@@ -65,6 +91,7 @@ void f_action(int idx)
     strncpy(G_runtime->worker[idx].result_msg,
       "fs ...           filesystem management\r\n"
       "ps               threads cpu time consumed\r\n"
+      "ntp <server>     update local clock\r\n"
       "reload           reload/reboot the device\r\n"
       "set ...          set device configuration\r\n"
       "uptime           show device uptime\r\n"
@@ -85,6 +112,11 @@ void f_action(int idx)
     G_runtime->worker[idx].result_code = 200 ;
   }
   else
+  if (strcmp(keyword, "ntp") == 0)
+  {
+    f_ntp_cmd(idx) ;
+  }
+  else
   if (strcmp(keyword, "reload") == 0)                           // reload
   {
     G_runtime->request_reload = 1 ;
@@ -97,9 +129,7 @@ void f_action(int idx)
   else
   if (strcmp(keyword, "uptime") == 0)                           // uptime
   {
-    snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
-             "uptime - %lld secs\r\n", esp_timer_get_time() / 1000000) ;
-    G_runtime->worker[idx].result_code = 200 ;
+    f_uptime_cmd(idx) ;
   }
   else
   if (strcmp(keyword, "version") == 0)                          // version
