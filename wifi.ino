@@ -38,6 +38,11 @@ void f_wifi_status_string(int status, char *s)
 
 void f_wifi_reset()
 {
+  // update "ts_last_wifi_check" so that main loop doesn't immediately try
+  // to reconnect wifi.
+
+  G_runtime->ts_last_wifi_check = esp_timer_get_time() ;
+
   WiFi.disconnect(true, true) ;         // turn off radio & clear credentials
   WiFi.setAutoReconnect(false) ;        // don't try to reconnect
   WiFi.mode(WIFI_MODE_NULL) ;           // disable all wifi functionality

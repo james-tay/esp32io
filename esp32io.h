@@ -43,6 +43,7 @@ struct config_data {
 
   char wifi_ssid[BUF_LEN_WIFI_SSID] ;
   char wifi_pw[BUF_LEN_WIFI_PW] ;
+  int wifi_check_secs ;
 
   // misc settings
 

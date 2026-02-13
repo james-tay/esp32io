@@ -303,6 +303,7 @@ void setup ()
   memset(G_runtime, 0, sizeof(S_RuntimeData)) ;
   G_runtime->L_worker = xSemaphoreCreateMutex() ;
   G_runtime->L_serial_in = xSemaphoreCreateBinary() ;
+  G_runtime->config.wifi_check_secs = DEF_WIFI_CHK_INT_SECS ;
 
   // print out some info to show that we're booting up
 
@@ -405,7 +406,8 @@ void loop ()
     G_runtime->ts_last_blink += DEF_RGBLED_BLINK_INT_SEC * 1000000 ;
   }
 
-  if (now > G_runtime->ts_last_wifi_check + (DEF_WIFI_CHK_INT_SECS * 1000000))
+  if (now > G_runtime->ts_last_wifi_check +
+            (G_runtime->config.wifi_check_secs * 1000000))
   {
     if ((WiFi.status() != WL_CONNECTED) &&
         (strlen(G_runtime->config.wifi_ssid) > 0) &&

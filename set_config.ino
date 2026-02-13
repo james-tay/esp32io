@@ -11,20 +11,20 @@ void f_load_config()
 
   // go thru each of the fields in S_ConfigData.
 
-  f = SPIFFS.open("/debug.cfg", "r") ;                          // debug
+  f = SPIFFS.open("/debug.cfg", "r") ;                  // debug
   if (f)
   {
     int amt = f.readBytes(s, BUF_LEN_LINE-1) ;
     if (amt > 0)
     {
       G_runtime->config.debug = atoi(s) ;
-      Serial.printf("BOOT: read from /debug.cfg setting debug->%d.\r\n",
+      Serial.printf("BOOT: read from /debug.cfg -> %d.\r\n",
                     G_runtime->config.debug) ;
     }
     f.close() ;
   }
 
-  f = SPIFFS.open("/wifi_ssid.cfg", "r") ;                      // wifi_ssid
+  f = SPIFFS.open("/wifi_ssid.cfg", "r") ;              // wifi_ssid
   if (f)
   {
     int amt = f.readBytes(G_runtime->config.wifi_ssid, BUF_LEN_WIFI_SSID-1) ;
@@ -38,7 +38,7 @@ void f_load_config()
     f.close() ;
   }
 
-  f = SPIFFS.open("/wifi_pw.cfg", "r") ;                        // wifi_pw
+  f = SPIFFS.open("/wifi_pw.cfg", "r") ;                // wifi_pw
   if (f)
   {
     int amt = f.readBytes(G_runtime->config.wifi_pw, BUF_LEN_WIFI_PW-1) ;
@@ -49,6 +49,19 @@ void f_load_config()
     }
     else
       G_runtime->config.wifi_pw[0] = 0 ;
+    f.close() ;
+  }
+
+  f = SPIFFS.open("/wifi_check_secs.cfg", "r") ;        // wifi_check_secs
+  if (f)
+  {
+    int amt = f.readBytes(s, BUF_LEN_LINE-1) ;
+    if (amt > 0)
+    {
+      G_runtime->config.wifi_check_secs = atoi(s) ;
+      Serial.printf("BOOT: read from /wifi_check_secs.cfg -> %d.\r\n",
+                    G_runtime->config.wifi_check_secs) ;
+    }
     f.close() ;
   }
 }
@@ -69,9 +82,10 @@ void f_set_config(int idx)
   if (f_parse(G_runtime->worker[idx].cmd, tokens, 3) != 3)      // print help
   {
     strncpy(G_runtime->worker[idx].result_msg,
-      "debug      <value>\r\n"
-      "wifi_ssid  <value>\r\n"
-      "wifi_pw    <value>\r\n",
+      "debug            <int>\r\n"
+      "wifi_ssid        <string>\r\n"
+      "wifi_pw          <string>\r\n"
+      "wifi_check_secs  <int>\r\n",
       BUF_LEN_WORKER_RESULT) ;
     G_runtime->worker[idx].result_code = 400 ;
     return ;
@@ -90,7 +104,7 @@ void f_set_config(int idx)
   {
     G_runtime->config.debug = atoi(value) ;
     snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
-             "Updating '%s' to %d.\r\n", key, G_runtime->config.debug) ;
+             "%s -> %d.\r\n", key, G_runtime->config.debug) ;
   }
   else
   if (strcmp(key, "wifi_ssid") == 0)
@@ -103,6 +117,13 @@ void f_set_config(int idx)
   {
     memset(G_runtime->config.wifi_pw, 0, BUF_LEN_WIFI_SSID) ;
     strncpy(G_runtime->config.wifi_pw, value, BUF_LEN_WIFI_SSID-1) ;
+  }
+  else
+  if (strcmp(key, "wifi_check_secs") == 0)
+  {
+    G_runtime->config.wifi_check_secs = atoi(value) ;
+    snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+             "%s -> %d.\r\n", key, G_runtime->config.wifi_check_secs) ;
   }
   else                                  // user specified an invalid "key"
   {
