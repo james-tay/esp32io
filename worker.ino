@@ -36,6 +36,54 @@ int f_parse(char *src, char **tokens, int max_tokens)
 }
 
 /*
+   This function is called from "f_action()" when we're called with either the
+   "hi" or "lo" commands. Note that "hi" or "lo" commands may include an
+   optional number of microseconds to pulse the pin at.
+*/
+
+void f_hi_lo_cmd(int idx)
+{
+  char *tokens[3], *cmd=NULL ;
+  int pin=-1, pulse=-1 ;
+  int count = f_parse(G_runtime->worker[idx].cmd, tokens, 3) ;
+  cmd = tokens[0] ;                     // "hi" or "lo"
+  if (count == 1)
+  {
+    strncpy(G_runtime->worker[idx].result_msg, "No pin specified.\r\n",
+            BUF_LEN_WORKER_RESULT) ;
+    G_runtime->worker[idx].result_code = 400 ;
+    return ;
+  }
+  pin = atoi(tokens[1]) ;               // parse the GPIO pin
+  if (count == 3)
+    pulse = atoi(tokens[2]) ;           // parse the pulse duration (usecs)
+
+  pinMode(pin, OUTPUT) ;
+  if (strcmp(cmd, "hi") == 0)
+    digitalWrite(pin, HIGH) ;
+  else
+    digitalWrite(pin, LOW) ;
+
+  // if the user is pulsing this pin, use 2x different calls to implement
+  // this. Ie,
+  //   delay(msec)              # allows FreeRTOS to run other tasks
+  //   delayMicroseconds(usec)  # uses a busy loop, only supports up to 16383 !
+
+  if (pulse > 0)
+  {
+    int msec = pulse / 1000 ;
+    int usec = pulse - (msec * 1000) ;
+    delay(msec) ;
+    delayMicroseconds(usec) ;
+
+    if (strcmp(cmd, "hi") == 0)
+      digitalWrite(pin, LOW) ;
+    else
+      digitalWrite(pin, HIGH) ;
+  }
+}
+
+/*
    This function is called from "f_action()", our job is to print our current
    uptime.
 */
@@ -90,7 +138,9 @@ void f_action(int idx)
   {
     strncpy(G_runtime->worker[idx].result_msg,
       "fs ...           filesystem management\r\n"
+      "hi <pin> [usec]  set a pin high or pulse it high\r\n"
       "ps               threads cpu time consumed\r\n"
+      "lo <pin> [usec]  set a pin low or pulse it low\r\n"
       "ntp <server>     update local clock\r\n"
       "reload           reload/reboot the device\r\n"
       "set ...          set device configuration\r\n"
@@ -99,6 +149,11 @@ void f_action(int idx)
       "wifi ...         wifi management\r\n",
       BUF_LEN_WORKER_RESULT) ;
     G_runtime->worker[idx].result_code = 200 ;
+  }
+  else
+  if (strcmp(keyword, "hi") == 0)                               // hi
+  {
+    f_hi_lo_cmd(idx) ;
   }
   else
   if (strcmp(keyword, "fs") == 0)                               // fs
@@ -110,6 +165,11 @@ void f_action(int idx)
   {
     vTaskGetRunTimeStats(G_runtime->worker[idx].result_msg) ;
     G_runtime->worker[idx].result_code = 200 ;
+  }
+  else
+  if (strcmp(keyword, "lo") == 0)
+  {
+    f_hi_lo_cmd(idx) ;
   }
   else
   if (strcmp(keyword, "ntp") == 0)

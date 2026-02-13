@@ -1,4 +1,19 @@
 /*
+   This function is called from "f_fs_cmd()". Our job is to print out as much
+   info as we can on our flash storage.
+*/
+
+void f_fs_info(int idx)
+{
+  unsigned long flash_size=0 ;
+  esp_flash_get_physical_size(NULL, &flash_size) ;
+  snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+           "partitionBytes: %d\r\nusedBytes: %d\r\nphysicalBytes: %ld\r\n",
+           SPIFFS.totalBytes(), SPIFFS.usedBytes(), flash_size) ;
+  G_runtime->worker[idx].result_code = 200 ;
+}
+
+/*
    This function is called from "f_fs_cmd()". We list the files in the SPIFFS.
    Recall that this filesystem does not support directories.
 */
@@ -259,12 +274,7 @@ void f_fs_cmd(int idx)
   if (strcmp(key, "info") == 0)                                 // "info"
   {
     if (f_fs_online(idx))
-    {
-      snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
-               "totalBytes: %d\r\nusedBytes: %d\r\n",
-               SPIFFS.totalBytes(), SPIFFS.usedBytes()) ;
-      G_runtime->worker[idx].result_code = 200 ;
-    }
+      f_fs_info(idx) ;
   }
   else
   if (strcmp(key, "ls") == 0)                                   // "ls"
