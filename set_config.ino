@@ -73,7 +73,7 @@ void f_load_config()
    thread's "result_msg" and "result_code".
 */
 
-void f_set_config(int idx)
+void f_set_cmd(int idx)
 {
   // parse our "set..." command into fields "cmd", "key" and "value". We
   // expect that "cmd" is "set".

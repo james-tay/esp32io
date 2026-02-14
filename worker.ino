@@ -44,7 +44,7 @@ int f_parse(char *src, char **tokens, int max_tokens)
 void f_hi_lo_cmd(int idx)
 {
   char *tokens[3], *cmd=NULL ;
-  int pin=-1, pulse=-1 ;
+  int pin=-1, pulse=-1, state=-1 ;
   int count = f_parse(G_runtime->worker[idx].cmd, tokens, 3) ;
   cmd = tokens[0] ;                     // "hi" or "lo"
   if (count == 1)
@@ -60,9 +60,15 @@ void f_hi_lo_cmd(int idx)
 
   pinMode(pin, OUTPUT) ;
   if (strcmp(cmd, "hi") == 0)
+  {
     digitalWrite(pin, HIGH) ;
+    state = 1 ;
+  }
   else
+  {
     digitalWrite(pin, LOW) ;
+    state = 0 ;
+  }
 
   // if the user is pulsing this pin, use 2x different calls to implement
   // this. Ie,
@@ -77,10 +83,23 @@ void f_hi_lo_cmd(int idx)
     delayMicroseconds(usec) ;
 
     if (strcmp(cmd, "hi") == 0)
+    {
       digitalWrite(pin, LOW) ;
+      snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+               "GPIO%d pulsed HIGH for %d usec\r\n", pin, pulse) ;
+    }
     else
+    {
       digitalWrite(pin, HIGH) ;
+      snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+               "GPIO%d pulsed LOW for %d usec\r\n", pin, pulse) ;
+    }
   }
+  else
+    snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+             "GPIO%d -> %d\r\n", pin, state) ;
+
+  G_runtime->worker[idx].result_code = 200 ;
 }
 
 /*
@@ -144,6 +163,7 @@ void f_action(int idx)
       "ntp <server>     update local clock\r\n"
       "reload           reload/reboot the device\r\n"
       "set ...          set device configuration\r\n"
+      "task ...         manage task threads\r\n"
       "uptime           show device uptime\r\n"
       "version          show software version and build time\r\n"
       "wifi ...         wifi management\r\n",
@@ -184,7 +204,12 @@ void f_action(int idx)
   else
   if (strcmp(keyword, "set") == 0)                              // set
   {
-    f_set_config(idx) ;
+    f_set_cmd(idx) ;
+  }
+  else
+  if (strcmp(keyword, "task") == 0)                             // task
+  {
+    f_task_cmd(idx) ;
   }
   else
   if (strcmp(keyword, "uptime") == 0)                           // uptime

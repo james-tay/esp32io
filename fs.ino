@@ -235,7 +235,7 @@ void f_fs_cmd(int idx)
 
   char *tokens[4], *cmd=NULL, *key=NULL, *filename=NULL, *content=NULL ;
   memset(tokens, 0, sizeof(char*) * 4) ;
-  if (f_parse(G_runtime->worker[idx].cmd, tokens,4) == 1)
+  if (f_parse(G_runtime->worker[idx].cmd, tokens, 4) == 1)
   {
     strncpy(G_runtime->worker[idx].result_msg,
       "fs format                format the SPIFFS\r\n"
