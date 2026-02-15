@@ -116,6 +116,7 @@
 #include <SPIFFS.h>
 #include "esp_sntp.h"
 #include "esp_flash.h"
+#include "esp_chip_info.h"
 #include "esp_netif_sntp.h"
 
 #include "esp32io.h"

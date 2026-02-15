@@ -219,8 +219,11 @@ void f_action(int idx)
   else
   if (strcmp(keyword, "version") == 0)                          // version
   {
+    esp_chip_info_t chip_info ;
+    esp_chip_info(&chip_info) ;
     snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
-             "esp32io git commit %s, built %s.\r\n",
+             "%s (revision %d), %d cores, git commit %s, built %s.\r\n",
+             ESP.getChipModel(), chip_info.revision, chip_info.cores,
              BUILD_COMMIT, BUILD_TIME) ;
     G_runtime->worker[idx].result_code = 200 ;
   }

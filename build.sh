@@ -1,24 +1,65 @@
 #!/bin/bash
+#
+# REQUIREMENTS
+#
+#   # arduino-cli core install esp32:esp32@3.3.6
+#
+#   Versions
+#     - Arduino CLI version 1.2.2
+#     - Core esp32:esp32 version 3.3.6
+#
+# USAGE
+#
+#   Examples,
+#
+#     $ export CHIP=esp32s3 ; export SERIAL_PORT=/dev/ttyACM0
+#     $ ./build.sh compile && ./build.sh upload_and_connect
+#
+#     $ export CHIP=esp32cam ; export SERIAL_PORT=/dev/ttyUSB1
+#     $ ./build.sh compile && ./build.sh upload_and_connect
+#
+#   (optionally hardcode initial / fallback wifi credentials)
+#
+#     $ export WIFI_SSID="mywifi" ; export WIFI_PW="secret"
+#     $ ./build.sh compile
 
 ESPTOOL="$HOME/.arduino15/packages/esp32/tools/esptool_py/5.1.0/esptool"
 BOARD="esp32:esp32"
+BAUD="115200"
 
-# ESP32-S3 settings
+# User must set "CHIP" and "SERIAL_PORT"
 
-#CHIP="esp32s3"
-#SERIAL_PORT="/dev/ttyACM0"
+if [ -z "$CHIP" ] ; then
+  echo "FATAL! CHIP is not set ('esp32', 'esp32s3' or 'esp32cam)."
+  exit 1
+fi
+if [ -z "$SERIAL_PORT" ] ; then
+  echo "FATAL! SERIAL_PORT is not set (eg, '/dev/ttyUSB1')."
+  exit 1
+fi
 
-# ESP32 (classic) settings
-
-CHIP="esp32"
-SERIAL_PORT="/dev/ttyUSB1"
-
-# =============================================================================
+case $CHIP in
+'esp32')
+  BOARD_OPTS="--fqbn $BOARD:$CHIP"
+  SERIAL_TOOL="screen $SERIAL_PORT $BAUD"
+  ;;
+'esp32s3')
+  BOARD_OPTS="--fqbn $BOARD:$CHIP"
+  SERIAL_TOOL="screen $SERIAL_PORT $BAUD"
+  ;;
+'esp32cam')
+  BOARD_OPTS="--fqbn $BOARD:$CHIP:PartitionScheme=min_spiffs"
+  SERIAL_TOOL="arduino-cli monitor -p $SERIAL_PORT \
+                --config baudrate=$BAUD --config dtr=off --config rts=off"
+  ;;
+*)
+  echo "FATAL! Unsupported CHIP."
+  exit 1
+  ;;
+esac
 
 case $1 in
 'compile')
-  shift 1
-  ARGS=$@
   TIME="`date "+%Y%m%d-%H%M%S"`"
   COMMIT="`git rev-parse --short HEAD`"
   CPPFLAGS="-DBUILD_COMMIT=\"$COMMIT\" -DBUILD_TIME=\"$TIME\""
@@ -29,21 +70,26 @@ case $1 in
     CPPFLAGS="$CPPFLAGS -DWIFI_SSID=\"$WIFI_SSID\" -DWIFI_PW=\"$WIFI_PW\""
   fi
 
-  arduino-cli compile -b $BOARD:$CHIP \
-    --build-property compiler.cpp.extra_flags="$CPPFLAGS" $ARGS .
+  echo "NOTICE: Compiling using platform - $BOARD:$CHIP"
+  arduino-cli compile $BOARD_OPTS \
+    --build-property compiler.cpp.extra_flags="$CPPFLAGS" .
   ;;
+
 'upload')
-  arduino-cli upload -p $SERIAL_PORT -b $BOARD:$CHIP --verify .
+  echo "NOTICE: Uploading using platform $BOARD:$CHIP to $SERIAL_PORT."
+  arduino-cli upload -p $SERIAL_PORT $BOARD_OPTS --verify .
   ;;
+
 'upload_and_connect')
   export TERM=vt100 # prevents "screen" from receiving scrollwheel events.
-  arduino-cli upload -p $SERIAL_PORT -b $BOARD:$CHIP --verify . && \
-    screen $SERIAL_PORT 115200
+  $0 upload && $SERIAL_TOOL
   ;;
+
 'erase')
 
-  # try to probe the device before we wipe everything on it.
+  # make sure we can probe the device before we wipe everything on it.
 
+  export CHIP="auto" # let "esptool" handle this
   export NO_COLOR=1 # disable color in "esptool" output
   $ESPTOOL --chip $CHIP --port $SERIAL_PORT flash-id
   if [ $? -ne 0 ] ; then
@@ -51,7 +97,9 @@ case $1 in
   fi
   $ESPTOOL --chip $CHIP --port $SERIAL_PORT erase-flash
   ;;
+
 *)
   echo "Usage: $0 { compile | upload | upload_and_connect | erase }"
   ;;
 esac
+
