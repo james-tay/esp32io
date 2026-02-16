@@ -254,7 +254,7 @@ void f_wifi_cmd(int idx)
   }
   else                                  // user specified an invalid "key"
   {
-    strcpy(G_runtime->worker[idx].result_msg, "Invalid key.\r\n") ;
+    strcpy(G_runtime->worker[idx].result_msg, "Invalid command.\r\n") ;
     G_runtime->worker[idx].result_code = 400 ;
   }
 }

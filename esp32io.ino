@@ -5,7 +5,11 @@
    this device via serial console or via a web server over wifi. All commands
    are then assigned to one of several worker threads. Once each command is
    completed, its response is delivered back to the user. The serial console
-   baud rate is set to DEF_SERIAL_BAUD.
+   baud rate is set to DEF_SERIAL_BAUD. Thus the main framework of this program
+   is to manage,
+     - listen for commands on either serial port or the webserver
+     - handle up to DEF_WEBSERVER_MAX_CLIENTS concurrent HTTP clients
+     - execute commands across DEF_WORKER_THREADS worker threads
 
    INTERNAL THREADS
 
@@ -116,6 +120,7 @@
 #include <SPIFFS.h>
 #include "esp_sntp.h"
 #include "esp_flash.h"
+#include "esp_camera.h"
 #include "esp_chip_info.h"
 #include "esp_netif_sntp.h"
 

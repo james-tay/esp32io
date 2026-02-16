@@ -144,10 +144,11 @@ void f_action(int idx)
   // to modify "cmd" at this point.
 
   char token_buf[BUF_LEN_WEBCLIENT], *tokens[1], *keyword=NULL ;
-  strcpy(token_buf, G_runtime->worker[idx].cmd) ;
+  strncpy(token_buf, G_runtime->worker[idx].cmd, BUF_LEN_WEBCLIENT) ;
   if (f_parse(token_buf, tokens, 1) == 0)
   {
-    strcpy(G_runtime->worker[idx].result_msg, "Missing command\r\n") ;
+    strncpy(G_runtime->worker[idx].result_msg, "Missing command\r\n",
+            BUF_LEN_WORKER_RESULT) ;
     G_runtime->worker[idx].result_code = 500 ;
     return ;
   }
@@ -156,6 +157,7 @@ void f_action(int idx)
   if (strcmp(keyword, "help") == 0)
   {
     strncpy(G_runtime->worker[idx].result_msg,
+      "cam ...          camera management\r\n"
       "fs ...           filesystem management\r\n"
       "hi <pin> [usec]  set a pin high or pulse it high\r\n"
       "ps               threads cpu time consumed\r\n"
@@ -169,6 +171,11 @@ void f_action(int idx)
       "wifi ...         wifi management\r\n",
       BUF_LEN_WORKER_RESULT) ;
     G_runtime->worker[idx].result_code = 200 ;
+  }
+  else
+  if (strcmp(keyword, "cam") == 0)                              // cam
+  {
+    f_cam_cmd(idx) ;
   }
   else
   if (strcmp(keyword, "hi") == 0)                               // hi

@@ -80,6 +80,10 @@ struct runtime_data {
   char url_params[BUF_LEN_WEB_URL] ;
   char metrics_buf[BUF_LEN_METRICS] ;
 
+  // camera configuration (keep this light in case it's not used)
+
+  camera_config_t *cam_setup ;          // from "esp_camera.h"
+
   // worker threads
 
   S_WorkerData worker[DEF_WORKER_THREADS] ;

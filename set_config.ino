@@ -127,7 +127,8 @@ void f_set_cmd(int idx)
   }
   else                                  // user specified an invalid "key"
   {
-    strcpy(G_runtime->worker[idx].result_msg, "Invalid key.\r\n") ;
+    strncpy(G_runtime->worker[idx].result_msg, "Invalid command.\r\n",
+            BUF_LEN_WORKER_RESULT) ;
     G_runtime->worker[idx].result_code = 400 ;
   }
 }

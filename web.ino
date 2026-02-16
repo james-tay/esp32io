@@ -189,6 +189,15 @@ void f_handle_webrequest(int idx, char *method, char *uri)
     return ;
   }
 
+  // the camera endpoint, recall that we don't want this thread to block
+
+  if ((strcmp(method, "GET") == 0) &&
+      (strcmp(G_runtime->url_path, "/cam") == 0))
+  {
+    f_handle_camera(idx) ;
+    return ;
+  }
+
   // if this is a REST request, parse the "cmd=..." into our "buf" and assign
   // the task to a worker thread.
 
