@@ -35,6 +35,75 @@
    core-0. We'll try to reserve core-1 for user threads which might be time
    or performance critical.
 
+   The following diagram is a summary of how commands, and their results are
+   handed off between threads.
+
+                [console]
+                ========
+                f_serial_command()
+                - wake worker with xTaskNotifyGive()
+                                         |
+                                         |
+     [webserver]                         |     [worker]
+     ===========                         |     ========
+     f_handle_webclient()                |     f_worker_thread()
+         |                               |       - block at ulTaskNotifyTake()
+         |--> f_handle_camera()          |           |
+         |    - identify worker          `---------->|
+         |    - xTaskNotifyGive()                    |
+         |         |                                 |
+         |         `-------------------------------->|
+         v                                           |
+     f_handle_webrequest()                           |
+       - identify worker                             |
+       - xTaskNotifyGive()                           |
+           |                                         |
+           `---------------------------------------->|
+                                                     |
+                                                     v
+                                               f_action()
+                                                 - does various tasks
+                [console]                            |       |
+                =========                            |       |
+                f_serial_command()                   |       |
+                - block on ulTaskNotifyTake() <------o       v
+                                                     |  f_process_camera()
+                                                     |       |
+                                                     |       |
+                                                     v       v
+                                               (notify result is ready)
+                                                 - serial: xTaskNotifyGive()
+                                                 - webclient: UDP pkt
+     [webserver]                                     |
+     ===========                                     |
+     (activity on "event_sd")  <---------------------'
+     f_handle_result()
+       - send http response (optional)
+       - f_close_webclient()
+       - mark worker as idle
+
+   TASK HAND OFF
+
+   1. Handing off to a worker thread - The following occurs in the calling
+      thread (ie, webserver or console threads) leading up to the hand off.
+       a) call "f_get_next_worker()" to identify next worker thread
+       b) set worker's "cmd" to point to the task it is to execute
+       c) set worker's "caller" to identify the webclient or console
+       d) call "xTaskNotifyGive()" on the worker's "w_handle"
+
+   2. Hand off from a worker back to its caller - Since different types of
+      callers may invoke a worker, the following situations may occur,
+       a) worker signals the serial console thread via "ulTaskNotifyTake()"
+       b) worker signals webserver thread by sending a UDP packet
+          - usually the webserver thread sends the command's response to the
+            webclient before calling "f_close_webclient()".
+       c) if worker is handling a "/cam" endpoint, the worker thread will,
+          - send the response to the web client
+          - worker thread's "result_code" is left at "0", before signalling
+            the webserver thread with a UDP packet. The "result_code" of "0"
+            tells the webserver thread that the web client response has already
+            been taken care of.
+
    INTERNAL DATA STRUCTURES
 
    One thing we want to avoid is calling "malloc()" many times, resulting in
@@ -100,7 +169,7 @@
 // various buffer sizes
 
 #define BUF_LEN_CONSOLE 256             // user command buffer on serial
-#define BUF_LEN_WEBCLIENT 256           // buffer for webclient HTTP header
+#define BUF_LEN_WEBCLIENT 1024          // buffer for webclient HTTP header
 #define BUF_LEN_WEB_URL 256             // maximum allowed URL length
 #define BUF_LEN_METRICS 2048            // buffer for "/metrics" response
 #define BUF_LEN_WORKER_NAME 12          // how long worker thread name is

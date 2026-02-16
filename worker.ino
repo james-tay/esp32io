@@ -173,6 +173,11 @@ void f_action(int idx)
     G_runtime->worker[idx].result_code = 200 ;
   }
   else
+  if (strncmp(keyword, "/cam", 4) == 0)                         // "/cam"
+  {
+    f_process_camera(idx) ;
+  }
+  else
   if (strcmp(keyword, "cam") == 0)                              // cam
   {
     f_cam_cmd(idx) ;

@@ -5,6 +5,10 @@
 
 void f_close_webclient(int idx)
 {
+  if (G_runtime->config.debug)
+    Serial.printf("DEBUG: f_close_webclient() idx:%d sd:%d\r\n",
+                  idx, G_runtime->webclients[idx].sd) ;
+
   close(G_runtime->webclients[idx].sd) ;
   G_runtime->webclients[idx].sd = -1 ;
   G_runtime->webclients[idx].buf_pos = 0 ;
@@ -194,7 +198,7 @@ void f_handle_webrequest(int idx, char *method, char *uri)
   if ((strcmp(method, "GET") == 0) &&
       (strcmp(G_runtime->url_path, "/cam") == 0))
   {
-    f_handle_camera(idx) ;
+    f_handle_camera(idx, uri) ;
     return ;
   }
 
@@ -327,23 +331,31 @@ void f_handle_result(int idx)
   int tid = w->worker ;
   w->ts_end = esp_timer_get_time() ;
 
-  // first send our HTTP response header
+  // IMPORTANT !!! The "result_code" is typically set to reflect the outcome
+  // of the user requested command. This function will print the HTTP headers,
+  // the contents of "result_msg", and finally a summary of how the command
+  // execution turned out. However, if the value of "result_code" is "0", this
+  // is a special case and we don't print anything. This is probably because
+  // any and all output meant for the client has already been delivered.
 
-  char *resp_l1 = "HTTP/1.1 200 OK\n" ;
-  char *resp_l2 = "Content-Type: text/plain\n" ;
-  char *resp_l3 = "Connection: close\n\n" ;
-  write(w->sd, resp_l1, strlen(resp_l1)) ;
-  write(w->sd, resp_l2, strlen(resp_l2)) ;
-  write(w->sd, resp_l3, strlen(resp_l3)) ;
+  if (G_runtime->worker[tid].result_code != 0)
+  {
+    char *resp_l1 = "HTTP/1.1 200 OK\n" ;
+    char *resp_l2 = "Content-Type: text/plain\n" ;
+    char *resp_l3 = "Connection: close\n\n" ;
+    write(w->sd, resp_l1, strlen(resp_l1)) ;
+    write(w->sd, resp_l2, strlen(resp_l2)) ;
+    write(w->sd, resp_l3, strlen(resp_l3)) ;
 
-  // now send the worker thread's result to the HTTP client and clean up
+    // now send the worker thread's result to the HTTP client and clean up
 
-  write(w->sd, G_runtime->worker[tid].result_msg,
-        strlen(G_runtime->worker[tid].result_msg)) ;
-  snprintf(line, BUF_LEN_LINE, "[code:%d time:%dms]\n",
-           G_runtime->worker[tid].result_code,
-           (w->ts_end - w->ts_start) / 1000) ;
-  write(w->sd, line, strlen(line)) ;
+    write(w->sd, G_runtime->worker[tid].result_msg,
+          strlen(G_runtime->worker[tid].result_msg)) ;
+    snprintf(line, BUF_LEN_LINE, "[code:%d time:%dms]\n",
+             G_runtime->worker[tid].result_code,
+             (w->ts_end - w->ts_start) / 1000) ;
+    write(w->sd, line, strlen(line)) ;
+  }
   f_close_webclient(idx) ;
 
   w->worker = -1 ;                              // mark as idle http client
@@ -424,6 +436,8 @@ void f_webserver_thread (void *param)
       {
         G_runtime->web_ts_last_accept = now ;
         int new_sd = accept(listen_sd, NULL, NULL) ;
+        if (G_runtime->config.debug)
+          Serial.printf("DEBUG: f_webserver_thread() new_sd:%d\r\n", new_sd) ;
 
         // see if we have an available "webclients" slot for "new_sd"
 

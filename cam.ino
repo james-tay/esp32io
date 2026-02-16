@@ -1,10 +1,43 @@
 /*
-   camera pin configuration, see reference,
-   https://github.com/raphaelbs/esp32-cam-ai-thinker/blob/master/docs/esp32cam-pin-notes.md
+   For camera pins , see "Schematic Diagram" / "Camera Connections" in
+
+     https://randomnerdtutorials.com/esp32-cam-ai-thinker-pinout/
+
+   Note
+   - built-in LED is on GPIO33 (pin lo = LED on)
+
+   OVERVIEW
+
+   Functions in this file have the following main entrypoints,
+
+     - f_handle_camera() - called by the webserver thread because the "/cam"
+       endpoint was called. This function must not block as this interferes
+       with the webserver. Although multiple webclients are supported, the
+       webserver is single threaded. This function focuses on handing off the
+       task to a worker thread.
+
+     - f_cam_cmd() - called by a worker thread when the user sends a "cam..."
+       command. It is more acceptable for this function to block, but since
+       this is typically configuration tasks, no significant blocking is
+       actually expected.
+
+     - f_process_camera() - called by a worker thread when the webserver has
+       handed off a "/cam" http request for the worker to process. The worker
+       thread services the request (this may take a long time) and hands the
+       webclient back to the webserver thread to clean up.
+
+   The information handed off by the webserver to the worker includes,
+
+     - "caller" - which points to the webclient making the request. This may
+       be either a "cam..." command or the "/cam" http request.
+     - "cmd" - which points to the "cam..." command or the "/cam" http request.
+       The worker thread determines the context and calls,
+       - f_cam_cmd()
+       - f_process_camera()
 */
 
-#define CAM_PIN_PWDN 32
-#define CAM_PIN_RESET -1 //software reset will be performed
+#define CAM_PIN_PWDN 32                 // set this HIGH to power off camera
+#define CAM_PIN_RESET -1
 #define CAM_PIN_XCLK 0
 #define CAM_PIN_SIOD 26
 #define CAM_PIN_SIOC 27
@@ -27,16 +60,94 @@
 /*
    This function is called from "f_handle_webrequest()" when the webclient at
    "idx" has called the "/cam" endpoint. It is important for this function to
-   not block (recall that the webserver thread has other work to do). We are
-   also fully responsible for handling this webclient's "sd" (ie, we are
-   responsible for calling "f_close_webclient()" when it's time.
+   not block (recall that the webserver thread has other web clients). This
+   function focuses on handing the task over to a worker thread.
 */
 
-void f_handle_camera(int idx)
+void f_handle_camera(int idx, char *uri)
 {
+  int tid = f_get_next_worker() ;
+  if (G_runtime->config.debug)
+    Serial.printf("DEBUG: f_handle_camera() webclient:%d->worker:%d (%s)\r\n",
+                  idx, tid, uri) ;
 
+  G_runtime->webclients[idx].worker = tid ;
+  G_runtime->webclients[idx].ts_start = esp_timer_get_time() ;
+  G_runtime->worker[tid].caller = idx ;
+  G_runtime->worker[tid].cmd = uri ;
+  xTaskNotifyGive(G_runtime->worker[tid].w_handle) ;
+}
 
-  f_close_webclient(idx) ;
+/*
+   This function is called from "f_process_camera()" from a worker thread with
+   "idx". Our job is to acquire a camera frame and send it to a web client.
+*/
+
+void f_process_camera(int idx)
+{
+  char *s=NULL, line[BUF_LEN_LINE] ;
+  int caller = G_runtime->worker[idx].caller ;
+  S_WebClient *client = &G_runtime->webclients[caller] ;
+  if (G_runtime->config.debug)
+    Serial.printf("DEBUG: f_process_camera() worker:%d->webclient:%d (%s)\r\n",
+                  idx, caller, G_runtime->worker[idx].cmd) ;
+
+  // capture a frame and make sure it's in JPEG format
+
+  camera_fb_t *fb = esp_camera_fb_get() ;
+  if (fb == NULL)
+  {
+    s = "HTTP/1.1 503 Unavailable\n" ;
+    write(client->sd, s, strlen(s)) ;
+    s = "Connection: close\n\n" ;
+    write(client->sd, s, strlen(s)) ;
+    s = "Cannot get camera frame, esp_camera_fb_get() failed.\n" ;
+    write(client->sd, s, strlen(s)) ;
+    return ;
+  }
+
+  size_t jpg_len = fb->len ;
+  unsigned char *jpg_buf = fb->buf ;
+  if (G_runtime->config.debug)
+    Serial.printf("DEBUG: f_process_camera() format:%d jpg_len:%d\r\n",
+                    fb->format, fb->len) ;
+  if (fb->format != PIXFORMAT_JPEG)
+  {
+    s = "HTTP/1.1 503 Unavailable\n" ;
+    write(client->sd, s, strlen(s)) ;
+    s = "Connection: close\n\n" ;
+    write(client->sd, s, strlen(s)) ;
+    snprintf(line, BUF_LEN_LINE, "Invalid frame format %d.\n", fb->format) ;
+    write(client->sd, line, strlen(line)) ;
+  }
+  else
+  {
+    // ready to send "jpg_buf" to the webclient, start with HTTP header
+
+    s = "HTTP/1.0 200 OK\n" ;
+    write(client->sd, s, strlen(s)) ;
+    s = "Accept-Ranges: bytes\n" ;
+    write(client->sd, s, strlen(s)) ;
+    s = "Cache-Control: no-cache\n" ;
+    write(client->sd, s, strlen(s)) ;
+    s = "Content-Type: image/jpeg\n" ;
+    write(client->sd, s, strlen(s)) ;
+    snprintf(line, BUF_LEN_LINE, "Content-Length: %d\n\n", jpg_len) ;
+    write(client->sd, line, strlen(line)) ;
+
+    int written=0, remainder, amt ;
+    while (written != jpg_len)
+    {
+      remainder = jpg_len - written ;
+      amt = write(client->sd, jpg_buf + written, remainder) ;
+      if (amt < 1)
+        break ;
+      else
+        written = written + amt ;
+      client->ts_last_activity = esp_timer_get_time() ;
+    }
+  }
+  esp_camera_fb_return(fb) ;
 }
 
 /*
