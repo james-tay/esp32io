@@ -94,6 +94,7 @@ void f_process_camera(int idx)
 
   // capture a frame and make sure it's in JPEG format
 
+  long long ts_start = esp_timer_get_time() ;
   camera_fb_t *fb = esp_camera_fb_get() ;
   if (fb == NULL)
   {
@@ -103,14 +104,15 @@ void f_process_camera(int idx)
     write(client->sd, s, strlen(s)) ;
     s = "Cannot get camera frame, esp_camera_fb_get() failed.\n" ;
     write(client->sd, s, strlen(s)) ;
-    G_runtime->cam_data->cam_faults++ ;
+    G_runtime->cam_data->frames_bad++ ;
     return ;
   }
+  long long ts_end = esp_timer_get_time() ;
+  G_runtime->cam_data->last_frame_size = fb->len ;
+  G_runtime->cam_data->last_capture_usec = ts_end - ts_start ;
 
-  size_t jpg_len = fb->len ;
-  unsigned char *jpg_buf = fb->buf ;
   if (G_runtime->config.debug)
-    Serial.printf("DEBUG: f_process_camera() format:%d jpg_len:%d\r\n",
+    Serial.printf("DEBUG: f_process_camera() format:%d fb_len:%d\r\n",
                     fb->format, fb->len) ;
   if (fb->format != PIXFORMAT_JPEG)
   {
@@ -123,7 +125,7 @@ void f_process_camera(int idx)
   }
   else
   {
-    // ready to send "jpg_buf" to the webclient, start with HTTP header
+    // ready to send "fb->buf" to the webclient, start with HTTP header
 
     s = "HTTP/1.0 200 OK\n" ;
     write(client->sd, s, strlen(s)) ;
@@ -133,20 +135,28 @@ void f_process_camera(int idx)
     write(client->sd, s, strlen(s)) ;
     s = "Content-Type: image/jpeg\n" ;
     write(client->sd, s, strlen(s)) ;
-    snprintf(line, BUF_LEN_LINE, "Content-Length: %d\n\n", jpg_len) ;
+    snprintf(line, BUF_LEN_LINE, "Content-Length: %d\n\n", fb->len) ;
     write(client->sd, line, strlen(line)) ;
-    G_runtime->cam_data->cam_frames++ ;
+    G_runtime->cam_data->frames_ok++ ;
 
     int written=0, remainder, amt ;
-    while (written != jpg_len)
+    ts_start = esp_timer_get_time() ;
+    while (written != fb->len)
     {
-      remainder = jpg_len - written ;
-      amt = write(client->sd, jpg_buf + written, remainder) ;
+      remainder = fb->len - written ;
+      amt = write(client->sd, fb->buf + written, remainder) ;
       if (amt < 1)
         break ;
       else
         written = written + amt ;
-      client->ts_last_activity = esp_timer_get_time() ;
+      client->ts_last_activity = esp_timer_get_time() ; // idle timestamp
+    }
+    if (written != fb->len)
+      G_runtime->cam_data->bad_xmits++ ;
+    else
+    {
+      ts_end = esp_timer_get_time() ;
+      G_runtime->cam_data->last_xmit_msec = (ts_end - ts_start) / 1000 ;
     }
   }
   esp_camera_fb_return(fb) ;
@@ -176,6 +186,8 @@ void f_cam_init(int idx, char *user_mhz)
     return ;
   }
 
+  // malloc() the necessary data structures and initialize it
+
   S_CamData *data = (S_CamData*) malloc(sizeof(S_CamData)) ;
   if (data == NULL)
   {
@@ -186,9 +198,7 @@ void f_cam_init(int idx, char *user_mhz)
   }
   memset(data, 0, sizeof(S_CamData)) ;
 
-
-
-  int xclk_mhz = atoi(user_mhz) ;
+  int xclk_mhz = atoi(user_mhz) ;                       // user specified clock
   if (xclk_mhz < CAM_XCLK_MIN_MHZ) xclk_mhz = CAM_XCLK_MIN_MHZ ;
   if (xclk_mhz > CAM_XCLK_MAX_MHZ) xclk_mhz = CAM_XCLK_MAX_MHZ ;
 
@@ -216,7 +226,7 @@ void f_cam_init(int idx, char *user_mhz)
   data->cam_setup.fb_location = CAMERA_FB_IN_PSRAM ;
   data->cam_setup.frame_size = FRAMESIZE_UXGA ;
   data->cam_setup.jpeg_quality = CAM_DEF_JPEG_QUALITY ;
-  data->cam_setup.fb_count = 2 ;
+  data->cam_setup.fb_count = 2 ;                // double buffering in PSRAM
 
   // at this point, try to initialize camera ... fingers crossed
 
@@ -231,8 +241,9 @@ void f_cam_init(int idx, char *user_mhz)
   }
 
   snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
-           "Camera initialized at %d mhz, psram free:%d size:%d bytes.\r\n",
+           "Camera initialized at %dmhz, psram %d/%d bytes.\r\n",
            xclk_mhz, ESP.getFreePsram(), ESP.getPsramSize()) ;
+  data->xclk_mhz = xclk_mhz ;
   G_runtime->worker[idx].result_code = 200 ;
   G_runtime->cam_data = data ;
 }

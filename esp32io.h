@@ -45,8 +45,13 @@ struct camera_data {
 
   // runtime performance metrics
 
-  unsigned long cam_frames ;            // total frames captured successfully
-  unsigned long cam_faults ;            // total esp_camera_fb_get() failures
+  unsigned long xclk_mhz ;              // camera's XCLK frequency
+  unsigned long frames_ok ;             // total frames captured successfully
+  unsigned long frames_bad ;            // total esp_camera_fb_get() failures
+  unsigned long bad_xmits ;             // could not send data to client
+  unsigned long last_frame_size ;       // image jpeg bytes
+  unsigned long last_capture_usec ;     // frame capture time
+  unsigned long last_xmit_msec ;        // time to send image to client
 
 } ; typedef struct camera_data S_CamData ;
 

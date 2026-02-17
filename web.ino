@@ -135,9 +135,19 @@ void f_handle_metrics(int idx)
 
   if (r->cam_data)
   {
-    snprintf(s, l, "ec_cam_frames %lu\n", r->cam_data->cam_frames) ;
+    S_CamData *c = r->cam_data ; // a macro
+
+    snprintf(s, l, "ec_cam_xclk_mhz %lu\n", c->xclk_mhz) ;
     strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
-    snprintf(s, l, "ec_cam_faults %lu\n", r->cam_data->cam_faults) ;
+    snprintf(s, l, "ec_cam_frames_ok %lu\n", c->frames_ok) ;
+    strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
+    snprintf(s, l, "ec_cam_frames_bad %lu\n", c->frames_bad) ;
+    strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
+    snprintf(s, l, "ec_cam_last_frame_size %lu\n", c->last_frame_size) ;
+    strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
+    snprintf(s, l, "ec_cam_last_capture_usec %lu\n", c->last_capture_usec) ;
+    strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
+    snprintf(s, l, "ec_cam_last_xmit_msec %lu\n", c->last_xmit_msec) ;
     strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
   }
 
