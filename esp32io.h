@@ -35,6 +35,21 @@ struct worker_data
 
 } ; typedef struct worker_data S_WorkerData ;
 
+// This structure holds camera configuration, it is malloc()'ed when needed
+
+struct camera_data {
+
+  // this is basically an opaque structure used by the camera subsystem
+
+  camera_config_t cam_setup ;           // from "esp_camera.h"
+
+  // runtime performance metrics
+
+  unsigned long cam_frames ;            // total frames captured successfully
+  unsigned long cam_faults ;            // total esp_camera_fb_get() failures
+
+} ; typedef struct camera_data S_CamData ;
+
 // This structure holds all user configuration
 
 struct config_data {
@@ -82,7 +97,7 @@ struct runtime_data {
 
   // camera configuration (keep this light in case it's not used)
 
-  camera_config_t *cam_setup ;          // from "esp_camera.h"
+  S_CamData *cam_data ;                 // only malloc()'ed on "cam init ..."
 
   // worker threads
 

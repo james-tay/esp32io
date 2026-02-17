@@ -103,6 +103,7 @@ void f_process_camera(int idx)
     write(client->sd, s, strlen(s)) ;
     s = "Cannot get camera frame, esp_camera_fb_get() failed.\n" ;
     write(client->sd, s, strlen(s)) ;
+    G_runtime->cam_data->cam_faults++ ;
     return ;
   }
 
@@ -134,6 +135,7 @@ void f_process_camera(int idx)
     write(client->sd, s, strlen(s)) ;
     snprintf(line, BUF_LEN_LINE, "Content-Length: %d\n\n", jpg_len) ;
     write(client->sd, line, strlen(line)) ;
+    G_runtime->cam_data->cam_frames++ ;
 
     int written=0, remainder, amt ;
     while (written != jpg_len)
@@ -158,7 +160,7 @@ void f_process_camera(int idx)
 
 void f_cam_init(int idx, char *user_mhz)
 {
-  if (G_runtime->cam_setup != NULL)                     // already initialized
+  if (G_runtime->cam_data != NULL)                      // already initialized
   {
     strncpy(G_runtime->worker[idx].result_msg,
             "Camera already initialized.\r\n", BUF_LEN_WORKER_RESULT) ;
@@ -174,56 +176,57 @@ void f_cam_init(int idx, char *user_mhz)
     return ;
   }
 
-  camera_config_t *setup = (camera_config_t*) malloc(sizeof(camera_config_t)) ;
-  if (setup == NULL)
+  S_CamData *data = (S_CamData*) malloc(sizeof(S_CamData)) ;
+  if (data == NULL)
   {
     strncpy(G_runtime->worker[idx].result_msg, 
-            "malloc() failed for camera_config_t.\r\n",
-            BUF_LEN_WORKER_RESULT) ;
+            "malloc() failed for S_CamData.\r\n", BUF_LEN_WORKER_RESULT) ;
     G_runtime->worker[idx].result_code = 500 ;
     return ;
   }
+  memset(data, 0, sizeof(S_CamData)) ;
+
+
 
   int xclk_mhz = atoi(user_mhz) ;
   if (xclk_mhz < CAM_XCLK_MIN_MHZ) xclk_mhz = CAM_XCLK_MIN_MHZ ;
   if (xclk_mhz > CAM_XCLK_MAX_MHZ) xclk_mhz = CAM_XCLK_MAX_MHZ ;
 
-  memset(setup, 0, sizeof(camera_config_t)) ;
-  setup->pin_pwdn = CAM_PIN_PWDN ;
-  setup->pin_reset = CAM_PIN_RESET ;
-  setup->pin_xclk = CAM_PIN_XCLK ;
-  setup->pin_d7 = CAM_PIN_D7 ;
-  setup->pin_d6 = CAM_PIN_D6 ;
-  setup->pin_d5 = CAM_PIN_D5 ;
-  setup->pin_d4 = CAM_PIN_D4 ;
-  setup->pin_d3 = CAM_PIN_D3 ;
-  setup->pin_d2 = CAM_PIN_D2 ;
-  setup->pin_d1 = CAM_PIN_D1 ;
-  setup->pin_d0 = CAM_PIN_D0 ;
-  setup->pin_vsync = CAM_PIN_VSYNC ;
-  setup->pin_href = CAM_PIN_HREF ;
-  setup->pin_sscb_sda = CAM_PIN_SIOD ;
-  setup->pin_sscb_scl = CAM_PIN_SIOC ;
-  setup->pin_pclk = CAM_PIN_PCLK ;
-  setup->xclk_freq_hz = xclk_mhz * 1000000 ;
-  setup->ledc_timer = LEDC_TIMER_0 ;
-  setup->ledc_channel = LEDC_CHANNEL_0 ;
-  setup->pixel_format = PIXFORMAT_JPEG ;
-  setup->grab_mode = CAMERA_GRAB_LATEST ;
-  setup->fb_location = CAMERA_FB_IN_PSRAM ;
-  setup->frame_size = FRAMESIZE_UXGA ;
-  setup->jpeg_quality = CAM_DEF_JPEG_QUALITY ;
-  setup->fb_count = 2 ;
+  data->cam_setup.pin_pwdn = CAM_PIN_PWDN ;
+  data->cam_setup.pin_reset = CAM_PIN_RESET ;
+  data->cam_setup.pin_xclk = CAM_PIN_XCLK ;
+  data->cam_setup.pin_d7 = CAM_PIN_D7 ;
+  data->cam_setup.pin_d6 = CAM_PIN_D6 ;
+  data->cam_setup.pin_d5 = CAM_PIN_D5 ;
+  data->cam_setup.pin_d4 = CAM_PIN_D4 ;
+  data->cam_setup.pin_d3 = CAM_PIN_D3 ;
+  data->cam_setup.pin_d2 = CAM_PIN_D2 ;
+  data->cam_setup.pin_d1 = CAM_PIN_D1 ;
+  data->cam_setup.pin_d0 = CAM_PIN_D0 ;
+  data->cam_setup.pin_vsync = CAM_PIN_VSYNC ;
+  data->cam_setup.pin_href = CAM_PIN_HREF ;
+  data->cam_setup.pin_sscb_sda = CAM_PIN_SIOD ;
+  data->cam_setup.pin_sscb_scl = CAM_PIN_SIOC ;
+  data->cam_setup.pin_pclk = CAM_PIN_PCLK ;
+  data->cam_setup.xclk_freq_hz = xclk_mhz * 1000000 ;
+  data->cam_setup.ledc_timer = LEDC_TIMER_0 ;
+  data->cam_setup.ledc_channel = LEDC_CHANNEL_0 ;
+  data->cam_setup.pixel_format = PIXFORMAT_JPEG ;
+  data->cam_setup.grab_mode = CAMERA_GRAB_LATEST ;
+  data->cam_setup.fb_location = CAMERA_FB_IN_PSRAM ;
+  data->cam_setup.frame_size = FRAMESIZE_UXGA ;
+  data->cam_setup.jpeg_quality = CAM_DEF_JPEG_QUALITY ;
+  data->cam_setup.fb_count = 2 ;
 
   // at this point, try to initialize camera ... fingers crossed
 
-  esp_err_t err = esp_camera_init(setup) ;
+  esp_err_t err = esp_camera_init(&data->cam_setup) ;
   if (err)
   {
     snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
              "esp_camera_init() failed 0x%x.\r\n", err) ;
     G_runtime->worker[idx].result_code = 500 ;
-    free(setup) ;
+    free(data) ;
     return ;                                            // we failed miserably
   }
 
@@ -231,7 +234,7 @@ void f_cam_init(int idx, char *user_mhz)
            "Camera initialized at %d mhz, psram free:%d size:%d bytes.\r\n",
            xclk_mhz, ESP.getFreePsram(), ESP.getPsramSize()) ;
   G_runtime->worker[idx].result_code = 200 ;
-  G_runtime->cam_setup = setup ;
+  G_runtime->cam_data = data ;
 }
 
 /*

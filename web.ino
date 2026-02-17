@@ -131,6 +131,16 @@ void f_handle_metrics(int idx)
   snprintf(s, l, "ec_web_idle_timeouts %lu\n", r->web_idle_timeouts) ;
   strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
 
+  // if the camera subsystem is configured, expose its metrics
+
+  if (r->cam_data)
+  {
+    snprintf(s, l, "ec_cam_frames %lu\n", r->cam_data->cam_frames) ;
+    strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
+    snprintf(s, l, "ec_cam_faults %lu\n", r->cam_data->cam_faults) ;
+    strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
+  }
+
   // worker threads, iterate over them
 
   for (int idx=0 ; idx < DEF_WORKER_THREADS ; idx++)
