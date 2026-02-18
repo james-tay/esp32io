@@ -1,5 +1,3 @@
-#define DEF_NTP_TIMEOUT_MSEC 10000
-
 /*
    This function is called from "f_action()". Our job is to parse the supplied
    user ntp command and attempt to set the system clock from the specified

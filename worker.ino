@@ -163,6 +163,7 @@ void f_action(int idx)
       "ps               threads cpu time consumed\r\n"
       "lo <pin> [usec]  set a pin low or pulse it low\r\n"
       "ntp <server>     update local clock\r\n"
+      "ota <url>        perform a software update\r\n"
       "reload           reload/reboot the device\r\n"
       "set ...          set device configuration\r\n"
       "task ...         manage task threads\r\n"
@@ -174,24 +175,16 @@ void f_action(int idx)
   }
   else
   if (strncmp(keyword, "/cam", 4) == 0)                         // "/cam"
-  {
     f_process_camera(idx) ;
-  }
   else
   if (strcmp(keyword, "cam") == 0)                              // cam
-  {
     f_cam_cmd(idx) ;
-  }
   else
   if (strcmp(keyword, "hi") == 0)                               // hi
-  {
     f_hi_lo_cmd(idx) ;
-  }
   else
   if (strcmp(keyword, "fs") == 0)                               // fs
-  {
     f_fs_cmd(idx) ;
-  }
   else
   if (strcmp(keyword, "ps") == 0)                               // ps
   {
@@ -199,35 +192,26 @@ void f_action(int idx)
     G_runtime->worker[idx].result_code = 200 ;
   }
   else
-  if (strcmp(keyword, "lo") == 0)
-  {
+  if (strcmp(keyword, "lo") == 0)                               // lo
     f_hi_lo_cmd(idx) ;
-  }
   else
-  if (strcmp(keyword, "ntp") == 0)
-  {
+  if (strcmp(keyword, "ntp") == 0)                              // ntp
     f_ntp_cmd(idx) ;
-  }
+  else
+  if (strcmp(keyword, "ota") == 0)                              // ota
+    f_ota_cmd(idx) ;
   else
   if (strcmp(keyword, "reload") == 0)                           // reload
-  {
     G_runtime->request_reload = 1 ;
-  }
   else
   if (strcmp(keyword, "set") == 0)                              // set
-  {
     f_set_cmd(idx) ;
-  }
   else
   if (strcmp(keyword, "task") == 0)                             // task
-  {
     f_task_cmd(idx) ;
-  }
   else
   if (strcmp(keyword, "uptime") == 0)                           // uptime
-  {
     f_uptime_cmd(idx) ;
-  }
   else
   if (strcmp(keyword, "version") == 0)                          // version
   {
@@ -241,9 +225,7 @@ void f_action(int idx)
   }
   else
   if (strcmp(keyword, "wifi") == 0)                             // wifi
-  {
     f_wifi_cmd(idx) ;
-  }
   else  // if we got here, that means the user gave us an invalid command.
   {
     snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,

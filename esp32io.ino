@@ -159,6 +159,7 @@
 #define DEF_WIFI_BEGIN_WAIT_SECS 30     // how long to wait after WiFi.begin()
 #define DEF_WIFI_CHK_INT_SECS 30        // how often to check wifi status
 #define DEF_MAX_FILENAME_LEN 30         // maximum filename length on SPIFFS
+#define DEF_NTP_TIMEOUT_MSEC 10000      // how long we wait for ntp to sync
 
 // thread scheduling priorities
 
@@ -185,13 +186,21 @@
 #define W_BUSY  2                       // thread is awake and running
 #define W_DONE  3                       // caller reads results and sets W_IDLE
 
+// arduino-esp32 - https://github.com/espressif/arduino-esp32
+
 #include <WiFi.h>
 #include <SPIFFS.h>
+#include <Update.h>
+
+// esp-idf - https://github.com/espressif/esp-idf/tree/master/components
+
 #include "esp_sntp.h"
 #include "esp_flash.h"
 #include "esp_camera.h"
 #include "esp_chip_info.h"
 #include "esp_netif_sntp.h"
+
+// my custom header
 
 #include "esp32io.h"
 
