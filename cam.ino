@@ -79,8 +79,8 @@ void f_handle_camera(int idx, char *uri)
 }
 
 /*
-   This function is called from "f_process_camera()" from a worker thread with
-   "idx". Our job is to acquire a camera frame and send it to a web client.
+   This function is called from "f_action()" in a worker thread with "idx".
+   Our job is to acquire a camera frame and send it to a web client.
 */
 
 void f_process_camera(int idx)
@@ -91,6 +91,16 @@ void f_process_camera(int idx)
   if (G_runtime->config.debug)
     Serial.printf("DEBUG: f_process_camera() worker:%d->webclient:%d (%s)\r\n",
                   idx, caller, G_runtime->worker[idx].cmd) ;
+
+  // if the camera subsystem is not initialized, print and error and stop here
+
+  if (G_runtime->cam_data == NULL)
+  {
+    strncpy(G_runtime->worker[idx].result_msg, "Camera not initialized.\r\n",
+            BUF_LEN_WORKER_RESULT) ;
+    G_runtime->worker[idx].result_code = 500 ;
+    return ;
+  }
 
   // capture a frame and make sure it's in JPEG format
 
@@ -127,14 +137,11 @@ void f_process_camera(int idx)
   {
     // ready to send "fb->buf" to the webclient, start with HTTP header
 
-    s = "HTTP/1.0 200 OK\n" ;
-    write(client->sd, s, strlen(s)) ;
-    s = "Accept-Ranges: bytes\n" ;
-    write(client->sd, s, strlen(s)) ;
-    s = "Cache-Control: no-cache\n" ;
-    write(client->sd, s, strlen(s)) ;
-    s = "Content-Type: image/jpeg\n" ;
-    write(client->sd, s, strlen(s)) ;
+    s = "HTTP/1.0 200 OK\n" ; write(client->sd, s, strlen(s)) ;
+    s = "Accept-Ranges: bytes\n" ; write(client->sd, s, strlen(s)) ;
+    s = "Cache-Control: no-cache\n" ; write(client->sd, s, strlen(s)) ;
+    s = "Content-Type: image/jpeg\n" ; write(client->sd, s, strlen(s)) ;
+
     snprintf(line, BUF_LEN_LINE, "Content-Length: %d\n\n", fb->len) ;
     write(client->sd, line, strlen(line)) ;
     G_runtime->cam_data->frames_ok++ ;
