@@ -80,9 +80,9 @@ case $1 in
   arduino-cli upload -p $SERIAL_PORT $BOARD_OPTS --verify .
   ;;
 
-'upload_and_connect')
+'connect')
   export TERM=vt100 # prevents "screen" from receiving scrollwheel events.
-  $0 upload && $SERIAL_TOOL
+  $SERIAL_TOOL
   ;;
 
 'erase')
@@ -99,7 +99,7 @@ case $1 in
   ;;
 
 *)
-  echo "Usage: $0 { compile | upload | upload_and_connect | erase }"
+  echo "Usage: $0 { compile | upload | connect | erase }"
   ;;
 esac
 

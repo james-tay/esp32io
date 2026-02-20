@@ -2,14 +2,62 @@
 #define OTA_PORT 80                     // the HTTP port we support
 #define OTA_POLL_MSEC 50                // how often we poll for response
 #define OTA_TIMEOUT_SECS 10             // how long we'll wait for a response
+#define OTA_MAX_DOWNLOAD_SECS 300       // how long to download our firmware
 #define OTA_MIN_CONTENT_LENGTH 262144   // minimum possible firmware size
 #define OTA_CONTENT_TYPE "application/octet-stream"     // ie, binary data
 
+/*
+   This function is called from "f_ota_http_get()" by worker thread "idx".
+   We use the currently connected "client" to read "content_length" bytes
+   directly into the OTA subsystem. Whatever the outcome, we're responsible
+   for recording in the worker thread's "result_msg" and "result_code".
+*/
+
 void f_ota_download(int idx, WiFiClient client, int content_length)
 {
+  // let's see if we have enough space for the OTA
 
+  if (Update.begin(content_length) == false)
+  {
+    snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+             "Insufficient space (%d bytes needed).\r\n", content_length) ;
+    G_runtime->worker[idx].result_code = 500 ;
+    return ;
+  }
 
+  // firmware downloads may take a long time, we don't want our webclient to
+  // time out and get disconnected if this takes a bit of time.
 
+  long long cutoff = esp_timer_get_time() + (OTA_MAX_DOWNLOAD_SECS * 1000000) ;
+  int caller_idx = G_runtime->worker[idx].caller ;
+  G_runtime->webclients[caller_idx].ts_last_activity = cutoff ;
+
+  unsigned long amt = Update.writeStream(client) ;
+  if (amt != content_length)
+  {
+    snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+             "Only wrote %d out of %d bytes, aborting.\r\n",
+             amt, content_length) ;
+    G_runtime->worker[idx].result_code = 500 ;
+    return ;
+  }
+
+  // at this point, download is complete, indicate we're done and see if
+  // the update process completed without issues
+
+  if ((Update.end()) && (Update.isFinished()))
+  {
+    snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+             "Successfully flashed %d bytes, please reload.\r\n", amt) ;
+    G_runtime->worker[idx].result_code = 200 ;
+  }
+  else
+  {
+    snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+             "Firmware update failed err:%d - %s\r\n",
+             Update.getError(), Update.errorString()) ;
+    G_runtime->worker[idx].result_code = 500 ;
+  }
 }
 
 /*
@@ -42,12 +90,12 @@ void f_ota_http_get(int idx, char *host, char *uri)
 
   // sit here polling until we get a response from the webserver
 
-  unsigned long now = millis() ;
-  unsigned long cut_off = now + (OTA_TIMEOUT_SECS * 1000) ;
+  long long now = esp_timer_get_time() ;
+  long long cut_off = now + (OTA_TIMEOUT_SECS * 1000000) ;
   while ((client.available() == 0) && (now < cut_off))
   {
     delay(OTA_POLL_MSEC) ;
-    now = millis() ;
+    now = esp_timer_get_time() ;
   }
   if (now >= cut_off)
   {
@@ -78,10 +126,10 @@ void f_ota_http_get(int idx, char *host, char *uri)
       client.stop() ;
       return ;
     }
-    if (s.startsWith("Content-Type:"))
+    if (s.startsWith("Content-Type:"))                  // sanity check
     {
       char *p = strstr(s.c_str(), " ") ;
-      if (strcmp(p+1, OTA_CONTENT_TYPE) != 0)           // sanity check
+      if (strcmp(p+1, OTA_CONTENT_TYPE) != 0)
       {
         snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
                  "Invalid type - %s\r\n", s.c_str()) ;

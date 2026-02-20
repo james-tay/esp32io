@@ -259,7 +259,7 @@ void f_fs_cmd(int idx)
   {
     if (SPIFFS.format())
     {
-      strncpy(G_runtime->worker[idx].result_msg, "Success. Please reboot.\r\n",
+      strncpy(G_runtime->worker[idx].result_msg, "Success. Please reload.\r\n",
               BUF_LEN_WORKER_RESULT) ;
       G_runtime->worker[idx].result_code = 200 ;
     }
