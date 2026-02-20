@@ -247,7 +247,7 @@ void f_handle_webrequest(int idx, char *method, char *uri)
 
   // if we got here, that means the web client didn't call any valid endpoints
 
-  char *r1 = "HTTP/1.1 404 OK\n" ;
+  char *r1 = "HTTP/1.1 404 Not Found\n" ;
   char *r2 = "Content-Type: text/plain\n" ;
   char *r3 = "Connection: close\n\n" ;
   char *r4 = "Invalid request\n" ;

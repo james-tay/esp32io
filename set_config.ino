@@ -115,8 +115,8 @@ void f_set_cmd(int idx)
   else
   if (strcmp(key, "wifi_pw") == 0)
   {
-    memset(G_runtime->config.wifi_pw, 0, BUF_LEN_WIFI_SSID) ;
-    strncpy(G_runtime->config.wifi_pw, value, BUF_LEN_WIFI_SSID-1) ;
+    memset(G_runtime->config.wifi_pw, 0, BUF_LEN_WIFI_PW) ;
+    strncpy(G_runtime->config.wifi_pw, value, BUF_LEN_WIFI_PW-1) ;
   }
   else
   if (strcmp(key, "wifi_check_secs") == 0)
