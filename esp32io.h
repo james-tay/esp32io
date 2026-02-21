@@ -1,4 +1,73 @@
-#include <lwip/netdb.h>
+// arduino-esp32 - https://github.com/espressif/arduino-esp32
+
+#include <WiFi.h>
+#include <SPIFFS.h>
+#include <Update.h>
+
+// esp-idf - https://github.com/espressif/esp-idf/tree/master/components
+
+#include "netdb.h"
+#include "esp_sntp.h"
+#include "esp_flash.h"
+#include "esp_camera.h"
+#include "esp_chip_info.h"
+#include "esp_netif_sntp.h"
+
+// general defines
+
+#define DEF_SERIAL_BAUD 115200          // serial port (over USB)
+#define DEF_RGBLED_PIN 48               // RGB led on ESP32-S3 dev board
+#define DEF_RGBLED_BLINK_MS 5           // how long LED stays on
+#define DEF_RGBLED_BLINK_INT_SEC 5      // how ofter to blink LED
+#define DEF_THREAD_STACKSIZE 8192       // stack size when thread is created
+#define DEF_WEBSERVER_EVENT_PORT 65501  // UDP mesg indicating task completion
+#define DEF_WEBSERVER_MAX_CLIENTS 4     // maximum concurrent HTTP clients
+#define DEF_WEBSERVER_MAX_IDLE_MS 8000  // disconnect idle http clients
+#define DEF_WORKER_THREADS 4            // threads which execute commands
+#define DEF_WORKER_FIND_MAX_MS 500      // max delay between finding workers
+#define DEF_WIFI_BEGIN_WAIT_SECS 30     // how long to wait after WiFi.begin()
+#define DEF_WIFI_CHK_INT_SECS 30        // how often to check wifi status
+#define DEF_MAX_FILENAME_LEN 30         // maximum filename length on SPIFFS
+#define DEF_NTP_TIMEOUT_MSEC 10000      // how long we wait for ntp to sync
+
+// user thread limits
+
+#define DEF_MAX_USER_THREADS 12         // number of user defined thread tasks
+#define DEF_MAX_USER_THREAD_NAME 16     // user defined thread's name
+#define DEF_MAX_THREAD_RESULTS 16       // number of metrics exposed
+#define DEF_MAX_THREAD_LABELS 8         // labels per metric
+
+// user thread result value types
+
+#define UTHREAD_RESULT_NONE 0           // no user thread result saved here
+#define UTHREAD_RESULT_INT 1            // an "int" data type
+#define UTHREAD_RESULT_FLOAT 2          // a "float" data type
+
+// thread scheduling priorities
+
+#define DEF_WORKER_PRIORITY 1           // thread scheduling priority
+#define DEF_CONSOLE_THREAD_PRIORITY 2   // thread scheduling priority
+#define DEF_WEBSERVER_THREAD_PRIORITY 3 // thread scheduling priority
+
+// various buffer sizes
+
+#define BUF_LEN_CONSOLE 256             // user command buffer on serial
+#define BUF_LEN_WEBCLIENT 1024          // buffer for webclient HTTP header
+#define BUF_LEN_WEB_URL 256             // maximum allowed URL length
+#define BUF_LEN_METRICS 2048            // buffer for "/metrics" response
+#define BUF_LEN_WORKER_NAME 12          // how long worker thread name is
+#define BUF_LEN_WORKER_RESULT 2048      // worker thread's "result_msg" buffer
+#define BUF_LEN_WIFI_SSID 32            // maximum wifi SSID allowed length
+#define BUF_LEN_WIFI_PW 64              // maximum wifi password allowed
+#define BUF_LEN_LINE 128                // generic metrics, http response, etc
+
+// worker thread states
+
+#define W_IDLE  0                       // blocked, can be assigned work
+#define W_SETUP 1                       // selected for work, but still idle
+#define W_BUSY  2                       // thread is awake and running
+#define W_DONE  3                       // caller reads results and sets W_IDLE
+
 
 // This structure tracks a single (connected) HTTP client
 

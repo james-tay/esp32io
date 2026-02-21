@@ -58,6 +58,13 @@ case $CHIP in
   ;;
 esac
 
+# place the build products in a specific path
+
+BUILD_PATH=".build/$BOARD:$CHIP"
+mkdir -p $BUILD_PATH || exit 1
+
+# now perform the user requested action
+
 case $1 in
 'compile')
   TIME="`date "+%Y%m%d-%H%M%S"`"
@@ -71,13 +78,14 @@ case $1 in
   fi
 
   echo "NOTICE: Compiling for $BOARD:$CHIP - $COMMIT - $TIME"
-  arduino-cli compile $BOARD_OPTS \
+  arduino-cli compile $BOARD_OPTS --build-path $BUILD_PATH \
     --build-property compiler.cpp.extra_flags="$CPPFLAGS" .
   ;;
 
 'upload')
   echo "NOTICE: Uploading using platform $BOARD:$CHIP to $SERIAL_PORT."
-  arduino-cli upload -p $SERIAL_PORT $BOARD_OPTS --verify .
+  arduino-cli upload -p $SERIAL_PORT $BOARD_OPTS \
+    --build-path $BUILD_PATH --verify .
   ;;
 
 'connect')
