@@ -55,6 +55,32 @@ struct camera_data {
 
 } ; typedef struct camera_data S_CamData ;
 
+struct thread_result {
+  int num_labels ;                      // number of labels for this metric
+  char *l_name[DEF_MAX_THREAD_LABELS] ; // array of pointers to label names
+  char *l_data[DEF_MAX_THREAD_LABELS] ; // array of pointers to label values
+  char result_type ;                    // whether result is "int" or "float"
+  int i_value ;                         // this result's value
+  double f_value ;                      // this result's value
+} ; typedef struct thread_result S_ThreadResult ;
+
+// This structure holds all data to support a single user task thread
+
+struct user_thread {
+  TaskHandle_t tid ;                    // set by xTaskCreatePinnedToCore()
+  char name[DEF_MAX_USER_THREAD_NAME] ; // user defined thread's name
+  long long loop ;                      // calls to the thread's function
+
+  // thread's user configuration comes here
+
+
+  // thread's runtime data and results come here
+
+  S_ThreadResult result[DEF_MAX_THREAD_RESULTS] ;       // all metrics exposed
+
+
+} ; typedef struct user_thread S_UserThread ;
+
 // This structure holds all user configuration
 
 struct config_data {
@@ -108,6 +134,10 @@ struct runtime_data {
 
   S_WorkerData worker[DEF_WORKER_THREADS] ;
   int next_worker ;
+
+  // user defined task threads
+
+  S_UserThread utask[DEF_MAX_USER_THREADS] ;
 
   // acquire these locks before interacting with the specified resources
 

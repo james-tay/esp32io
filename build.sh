@@ -70,7 +70,7 @@ case $1 in
     CPPFLAGS="$CPPFLAGS -DWIFI_SSID=\"$WIFI_SSID\" -DWIFI_PW=\"$WIFI_PW\""
   fi
 
-  echo "NOTICE: Compiling using platform - $BOARD:$CHIP"
+  echo "NOTICE: Compiling for $BOARD:$CHIP - $COMMIT - $TIME"
   arduino-cli compile $BOARD_OPTS \
     --build-property compiler.cpp.extra_flags="$CPPFLAGS" .
   ;;

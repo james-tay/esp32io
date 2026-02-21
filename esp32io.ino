@@ -82,7 +82,7 @@
        - f_close_webclient()
        - mark worker as idle
 
-   TASK HAND OFF
+   WEBSERVER <-> WORKER - HAND OFF
 
    1. Handing off to a worker thread - The following occurs in the calling
       thread (ie, webserver or console threads) leading up to the hand off.
@@ -160,6 +160,13 @@
 #define DEF_WIFI_CHK_INT_SECS 30        // how often to check wifi status
 #define DEF_MAX_FILENAME_LEN 30         // maximum filename length on SPIFFS
 #define DEF_NTP_TIMEOUT_MSEC 10000      // how long we wait for ntp to sync
+
+// user threads
+
+#define DEF_MAX_USER_THREADS 12         // number of user defined thread tasks
+#define DEF_MAX_USER_THREAD_NAME 16     // user defined thread's name
+#define DEF_MAX_THREAD_RESULTS 16       // number of metrics exposed
+#define DEF_MAX_THREAD_LABELS 8         // labels per metric
 
 // thread scheduling priorities
 

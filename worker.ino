@@ -129,6 +129,24 @@ void f_uptime_cmd(int idx)
 }
 
 /*
+   This function is called from "f_action()", our job is to print some info
+   on our hardware, software and runtime.
+*/
+
+void f_version_cmd(int idx)
+{
+  esp_chip_info_t chip_info ;
+  esp_chip_info(&chip_info) ;
+  snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+           "Model %s (revision %d), %d cores.\r\n"
+           "Git commit %s, built %s.\r\n"
+           "G_runtime is %d bytes.\r\n",
+           ESP.getChipModel(), chip_info.revision, chip_info.cores,
+           BUILD_COMMIT, BUILD_TIME, sizeof(S_RuntimeData)) ;
+  G_runtime->worker[idx].result_code = 200 ;
+}
+
+/*
    This function is called from "f_worker_thread()" and supplied "idx" of the
    worker thread which called us. Our job is to parse/ execute our "cmd" and
    write to our "result_msg" and "result_code". If we're calling another
@@ -214,15 +232,7 @@ void f_action(int idx)
     f_uptime_cmd(idx) ;
   else
   if (strcmp(keyword, "version") == 0)                          // version
-  {
-    esp_chip_info_t chip_info ;
-    esp_chip_info(&chip_info) ;
-    snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
-             "%s (revision %d), %d cores, git commit %s, built %s.\r\n",
-             ESP.getChipModel(), chip_info.revision, chip_info.cores,
-             BUILD_COMMIT, BUILD_TIME) ;
-    G_runtime->worker[idx].result_code = 200 ;
-  }
+    f_version_cmd(idx) ;
   else
   if (strcmp(keyword, "wifi") == 0)                             // wifi
     f_wifi_cmd(idx) ;

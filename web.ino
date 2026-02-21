@@ -234,7 +234,8 @@ void f_handle_webrequest(int idx, char *method, char *uri)
     strcpy(G_runtime->webclients[idx].buf, G_runtime->url_params+4) ;
     f_url_decode(G_runtime->webclients[idx].buf) ;
 
-    // select a worker thread, get it prepared and then wake it up
+    // select a worker thread, get it prepared and then wake it up. Note that
+    // if all worker threads are busy, this webserver thread blocks here.
 
     int tid = f_get_next_worker() ;
     G_runtime->webclients[idx].worker = tid ;
