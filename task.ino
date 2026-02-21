@@ -55,14 +55,52 @@
 */
 
 /*
-   We're called from "f_action()" when the user wants to manage task threads.
-   Parse the command and proceed accordingly.
+   This is a convenience function which reads from "filename", pullint up to
+   "max_size" bytes into "buf". On success the number of bytes is returned,
+   otherwise -1 to indicate something went wrong (probably no such file).
+*/
+
+int f_read_single_line(char *filename, char *buf, int max_size)
+{
+  if (G_runtime->config.debug)
+    Serial.printf("DEBUG: f_read_single_line() filename:%s max_size:%d\r\n",
+                  filename, max_size) ;
+
+
+  return(0) ;
+}
+
+/*
+   This function is called from "f_task_cmd()", our job is to start a user
+   thread "name". This mostly involves initializing and parsing configuration
+   into the thread's "S_UserThread" structure and "xTaskCreatePinnedToCore()".
+*/
+
+void f_task_start(int idx, char *name)
+{
+  int amt ;
+  char line[BUF_LEN_LINE], filename[DEF_MAX_FILENAME_LEN] ;
+
+  // try read the file "/<name>.thread"
+
+  snprintf(filename, DEF_MAX_FILENAME_LEN, "/%s.thread", name) ;
+  amt = f_read_single_line(filename, line, BUF_LEN_LINE) ;
+
+
+
+
+
+}
+
+/*
+   We're called from "f_action()" by the worker thread "idx" when the user
+   wants to manage task threads. Parse the command and proceed accordingly.
 */
 
 void f_task_cmd(int idx)
 {
-  char *tokens[2], *cmd=NULL, *action=NULL ;
-  int count = f_parse(G_runtime->worker[idx].cmd, tokens, 2) ;
+  char *tokens[3], *cmd=NULL, *action=NULL, *name=NULL ;
+  int count = f_parse(G_runtime->worker[idx].cmd, tokens, 3) ;
 
   if (count == 1)
   {
@@ -72,7 +110,18 @@ void f_task_cmd(int idx)
             "task stop <name>   stop a thread\r\n",
             BUF_LEN_WORKER_RESULT) ;
     G_runtime->worker[idx].result_code = 400 ;
+    return ;
   }
+  cmd = tokens[0] ;
+  if (count > 1) action = tokens[1] ;
+  if (count > 2) name = tokens[2] ;
 
-
+  if ((strcmp(action, "start") == 0) && (name != NULL))
+    f_task_start(idx, name) ;
+  else
+  {
+    strncpy(G_runtime->worker[idx].result_msg, "Invalid command.\r\n",
+            BUF_LEN_WORKER_RESULT) ;
+    G_runtime->worker[idx].result_code = 200 ;
+  }
 }

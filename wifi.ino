@@ -220,8 +220,8 @@ void f_wifi_cmd(int idx)
   {
     if (WiFi.status() == WL_CONNECTED)
     {
-      sprintf(G_runtime->worker[idx].result_msg, "Disconnecting from %s.\r\n",
-              WiFi.SSID()) ;
+      snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+               "Disconnecting from %s.\r\n", WiFi.SSID()) ;
     }
     else
       strcpy(G_runtime->worker[idx].result_msg, "Not connected.\r\n") ;
@@ -254,7 +254,8 @@ void f_wifi_cmd(int idx)
   }
   else                                  // user specified an invalid "key"
   {
-    strcpy(G_runtime->worker[idx].result_msg, "Invalid command.\r\n") ;
+    strncpy(G_runtime->worker[idx].result_msg, "Invalid command.\r\n",
+            BUF_LEN_WORKER_RESULT) ;
     G_runtime->worker[idx].result_code = 400 ;
   }
 }
