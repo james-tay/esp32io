@@ -84,11 +84,16 @@ void f_handle_metrics(int idx)
   // base system metrics
 
   r->metrics_buf[0] = 0 ;
+  size_t heap_free_block = heap_caps_get_largest_free_block(
+                             MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL) ;
+
   snprintf(s, l, "ec_uptime_secs %lld\n", esp_timer_get_time() / 1000000) ;
   strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
   snprintf(s, l, "ec_chip_temperature %.2f\n", temperatureRead()) ;
   strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
   snprintf(s, l, "ec_free_heap_bytes %ld\n", xPortGetFreeHeapSize()) ;
+  strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
+  snprintf(s, l, "ec_free_block_bytes %ld\n", heap_free_block) ;
   strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
   snprintf(s, l, "ec_ntp_updates %lu\n", r->ntp_updates) ;
   strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;

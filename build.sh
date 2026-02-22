@@ -22,6 +22,10 @@
 #
 #     $ export WIFI_SSID="mywifi" ; export WIFI_PW="secret"
 #     $ ./build.sh compile
+#
+#   Print a stacktrace using a crash dump from serial console,
+#
+#     $ ./build.sh stack "0x4008ae92:0x3ffe1ac0 0x40179fea:0x3ffe1ad0 ..."
 
 ESPTOOL="$HOME/.arduino15/packages/esp32/tools/esptool_py/5.1.0/esptool"
 BOARD="esp32:esp32"
@@ -106,8 +110,12 @@ case $1 in
   $ESPTOOL --chip $CHIP --port $SERIAL_PORT erase-flash
   ;;
 
+'stack')
+  xtensa-esp32s3-elf-addr2line -pfiaC -e $BUILD_PATH/esp32io.ino.elf "$2"
+  ;;
+
 *)
-  echo "Usage: $0 { compile | upload | connect | erase }"
+  echo "Usage: $0 { compile | upload | connect | erase | stack <stacktrace> }"
   ;;
 esac
 

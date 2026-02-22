@@ -37,6 +37,7 @@
 #define DEF_MAX_THREAD_RESULTS 16       // number of metrics exposed
 #define DEF_MAX_THREAD_LABELS 8         // labels per metric
 #define DEF_MAX_THREAD_CONF 80          // total bytes of all thread args
+#define DEF_MAX_THREAD_ARGS 8           // user defined arguments
 
 // user thread result value types
 
@@ -154,6 +155,8 @@ struct user_thread {
 
   // thread's user configuration comes here
 
+  int num_args ;                        // actual arguments in "in_args"
+  char *in_args[DEF_MAX_THREAD_ARGS] ;  // fixed array to all possible args
   char conf[DEF_MAX_THREAD_CONF] ;      // buffer for all thread arguments
 
   // thread's runtime data and results come here

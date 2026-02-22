@@ -85,3 +85,29 @@ threading and NTP.
   Wrote 955680 bytes (617860 compressed) at 0x00010000 in 9.4 seconds (813.1 kbit/s).
   Hash of data verified.
 
+Compiling when source code crossed over 3,000 lines. Now includes camera, OTA
+and incomplete user thread code.
+
+  (compile for esp32-cam)
+
+  Sketch uses 1104431 bytes (56%) of program storage space.
+  Maximum is 1966080 bytes.
+  Global variables use 57888 bytes (17%) of dynamic memory,
+  leaving 269792 bytes for local variables. Maximum is 327680 bytes.
+
+  (upload esp32-cam)
+
+  Configuring flash size...
+  Flash will be erased from 0x00001000 to 0x00007fff...
+  Flash will be erased from 0x00008000 to 0x00008fff...
+  Flash will be erased from 0x0000e000 to 0x0000ffff...
+  Flash will be erased from 0x00010000 to 0x0011dfff...
+  Wrote 25184 bytes (16076 compressed) at 0x00001000 in 0.8 seconds (247.7 kbit/s).
+  Hash of data verified.
+  Wrote 3072 bytes (146 compressed) at 0x00008000 in 0.1 seconds (439.0 kbit/s).
+  Hash of data verified.
+  Wrote 8192 bytes (47 compressed) at 0x0000e000 in 0.1 seconds (668.8 kbit/s).
+  Hash of data verified.
+  Wrote 1104576 bytes (702535 compressed) at 0x00010000 in 19.2 seconds (460.6 kbit/s).
+  Hash of data verified.
+

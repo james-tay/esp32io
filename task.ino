@@ -13,10 +13,29 @@
    This defines a thread whose "main" function is defined by "thread_function"
    and will be run on "core". A optional comma separated list of arguments may
    be specified. If the thread exposes metrics (with optional labels), then
-   these may be configured in an optional file "</<name>.tags" which has the
-   following format,
+   the metric name may be configured in an optional file "/<name>.labels"
+   which has the following format,
 
      <metric_name>[,<label1>="<value1>",<labelN>="<valueN>",...]
+
+   Note that the "/<name>.labels" file is not used by the user thread, but is
+   used by the webserver thread when rendering metrics. That is to say, all
+   values exposed by a user thread will have identical metric names. The thread
+   identifies the different values by applying different labels on each value
+   exposed.
+
+   For example, a thread named "env1" which exposes 2 values. Internally, it
+   applies the labels 'measurement="temperature"' and 'measurement="humidity"'
+   Let's say we have the file named "/env1.labels" with the contents,
+
+     sensor_env,model="dht22",location="bath"
+
+   Then the metrics which will be exposed will look like this,
+
+     sensor_env{model="dht22",location="bath",measurement="temperature"} 22.3
+     sensor_env{model="dht22",location="bath",measurement="humidity"} 76.5
+
+   THREAD STATES AND LIFECYCLE
 
    The functions in this file focus on managing these user task threads. Each
    user task thread has a "S_UserThread" data structure which tracks state,
@@ -50,7 +69,14 @@
    buffers must be the reference point for all subsequent uses of thread
    configurations. A thread may choose to expose an arbituary number of values
    or metrics during its work. The individual metrics in turn may have labels.
+   For example, in the file "/hello.thread", we have the contents,
 
+     myfunc:1,50,60,70
+
+   This line gets loaded into the thread's "conf" buffer initially, but gets
+   parsed into separate strings. Eventually the "conf" buffer looks like this,
+
+     myfunc<\00>1<\00>50<\00>60<\00>70<\x00>
 
 */
 
@@ -62,6 +88,11 @@
 void f_user_thread_lifecycle(void *param)
 {
   S_UserThread *self = (S_UserThread*) param ;
+
+  for (int i=0 ; i < self->num_args ; i++)
+    Serial.printf("DEBUG: %s[%d]->%s\r\n", self->name, i, self->in_args[i]) ;
+
+  // user thread's main loop
 
   while (1)
     delay(1000) ;
@@ -92,6 +123,41 @@ int f_read_single_line(char *filename, char *buf, int max_size)
 }
 
 /*
+   This function is called from "f_task_start()" when we're ready to start
+   a user thread. Our job is to perform this action and set the "idx" worker's
+   "result_code" and "result_msg" accordingly.
+*/
+
+void f_task_create(int idx, int slot, int core, char *name)
+{
+  if (xTaskCreatePinnedToCore (
+        f_user_thread_lifecycle,        // function to run
+        name,                           // thread's name
+        DEF_THREAD_STACKSIZE,           // thread's stacksize
+        &G_runtime->utask[slot],        // param to pass into thread
+        DEF_USER_THREAD_PRIORITY,       // priority (higher is more important)
+        &G_runtime->utask[slot].tid,    // task handle
+        core                            // core ID
+        ) == pdPASS)
+  {
+    snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+             "Started thread '%s' on core %d.\r\n", name, core) ;
+    G_runtime->worker[idx].result_code = 200 ;
+
+    if (G_runtime->config.debug)
+      Serial.printf("DEBUG: f_task_create() "
+                    "slot:%d name:%s core:%d tid:%d\r\n",
+                    slot, name, core, G_runtime->utask[slot].tid) ;
+  }
+  else
+  {
+    snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+             "Failed to start thread '%s'.\r\n", name) ;
+    G_runtime->worker[idx].result_code = 500 ;
+  }
+}
+
+/*
    This function is called from "f_task_cmd()", our job is to start a user
    thread "name". This mostly involves initializing and parsing configuration
    into the thread's "S_UserThread" structure and "xTaskCreatePinnedToCore()".
@@ -113,6 +179,8 @@ void f_task_start(int idx, char *name)
     G_runtime->worker[idx].result_code = 400 ;
     return ;
   }
+
+  // parse out "ft_name", "core" and "args" first
 
   pos = strstr(line, ",") ;
   if (pos)
@@ -144,33 +212,50 @@ void f_task_start(int idx, char *name)
   strncpy(G_runtime->utask[slot].conf, args, DEF_MAX_THREAD_CONF) ;
   strncpy(G_runtime->utask[slot].name, name, DEF_MAX_USER_THREAD_NAME) ;
 
-  // start the user thread
+  // parse all user supplied task "args" into thread's "in_args" array.
 
-  if (xTaskCreatePinnedToCore (
-        f_user_thread_lifecycle,        // function to run
-        name,                           // thread's name
-        DEF_THREAD_STACKSIZE,           // thread's stacksize
-        &G_runtime->utask[slot],        // param to pass into thread
-        DEF_USER_THREAD_PRIORITY,       // priority (higher is more important)
-        &G_runtime->utask[slot].tid,    // task handle
-        atoi(core)                      // core ID
-        ) == pdPASS)
+  int num=0 ;
+  char *p=NULL ;
+  G_runtime->utask[slot].in_args[num] = strtok_r(args, ",", &p) ;
+  if (G_runtime->utask[slot].in_args[num] != NULL)
+    for (num=1 ; num < DEF_MAX_THREAD_ARGS ; num++)
+    {
+      G_runtime->utask[slot].in_args[num] = strtok_r(NULL, ",", &p) ;
+      if (G_runtime->utask[slot].in_args[num] == NULL)
+        break ;
+    }
+  G_runtime->utask[slot].num_args = num ;
+
+  f_task_create(idx, slot, atoi(core), name) ;   // ready to start user thread
+}
+
+/*
+   This function is called from "f_task_cmd()", our job is to stop a user
+   thread "name". This begins by setting its state to UTHREAD_WRAPUP before
+   calling "vTaskDelete()".
+*/
+
+void f_task_stop(int idx, char *name)
+{
+  // see if a user thread going by "name" even exists
+
+  int slot ;
+  for (slot=0 ; slot < DEF_MAX_USER_THREADS ; slot++)
+    if (((G_runtime->utask[slot].state == UTHREAD_STARTING) ||
+         (G_runtime->utask[slot].state == UTHREAD_RUNNING)) &&
+        (strcmp(G_runtime->utask[slot].name, name) == 0))
+      break ;
+  if (slot == DEF_MAX_USER_THREADS)
   {
     snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
-             "Started thread '%s' on core %d.\r\n", name, atoi(core)) ;
-    G_runtime->worker[idx].result_code = 200 ;
+             "No '%s' thread currently active.\r\n", name) ;
+    G_runtime->worker[idx].result_code = 400 ;
+    return ;
+  }
 
-    if (G_runtime->config.debug)
-      Serial.printf("DEBUG: f_task_start() "
-                    "slot:%d name:%s core:%s args:%s tid:%d\r\n",
-                    slot, ft_name, core, args, G_runtime->utask[slot].tid) ;
-  }
-  else
-  {
-    snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
-             "Failed to start thread '%s'.\r\n", name) ;
-    G_runtime->worker[idx].result_code = 500 ;
-  }
+
+
+
 }
 
 /*
@@ -199,6 +284,9 @@ void f_task_cmd(int idx)
 
   if ((strcmp(action, "start") == 0) && (name != NULL))
     f_task_start(idx, name) ;
+  else
+  if ((strcmp(action, "stop") == 0) && (name != NULL))
+    f_task_stop(idx, name) ;
   else
   {
     strncpy(G_runtime->worker[idx].result_msg, "Invalid command.\r\n",
