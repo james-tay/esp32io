@@ -64,6 +64,7 @@
 #define BUF_LEN_WIFI_SSID 32            // maximum wifi SSID allowed length
 #define BUF_LEN_WIFI_PW 64              // maximum wifi password allowed
 #define BUF_LEN_LINE 128                // generic metrics, http response, etc
+#define BUF_LEN_UTHREAD_STATUS 80       // optional user thread status message
 
 // worker thread states
 
@@ -153,6 +154,7 @@ struct user_thread {
   TaskHandle_t tid ;                    // set by xTaskCreatePinnedToCore()
   char name[DEF_MAX_USER_THREAD_NAME] ; // user defined thread's name
   long long loop ;                      // calls to the thread's function
+  long long ts_start ;                  // time when thread came to life
 
   // thread's user configuration comes here
 
@@ -163,6 +165,7 @@ struct user_thread {
 
   // thread's runtime data and results come here
 
+  char status[BUF_LEN_UTHREAD_STATUS] ; // user thread status string buffer
   S_ThreadResult result[DEF_MAX_THREAD_RESULTS] ;       // all metrics exposed
 
 } ; typedef struct user_thread S_UserThread ;
@@ -229,6 +232,7 @@ struct runtime_data {
 
   SemaphoreHandle_t L_worker ;          // "next_worker"
   SemaphoreHandle_t L_serial_in ;       // unlocked when serial data arrives
+  SemaphoreHandle_t L_uthread_setup ;   // lock when assigning a user thread
 
   // various performance metrics
 

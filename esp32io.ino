@@ -332,6 +332,7 @@ void setup ()
   G_runtime = (S_RuntimeData*) malloc(sizeof(S_RuntimeData)) ;
   memset(G_runtime, 0, sizeof(S_RuntimeData)) ;
   G_runtime->L_worker = xSemaphoreCreateMutex() ;
+  G_runtime->L_uthread_setup = xSemaphoreCreateMutex() ;
   G_runtime->L_serial_in = xSemaphoreCreateBinary() ;
   G_runtime->config.wifi_check_secs = DEF_WIFI_CHK_INT_SECS ;
 

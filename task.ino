@@ -80,6 +80,46 @@
 */
 
 /*
+   This function is called from "f_task_cmd()". Our job is to list all threads
+   running (or not running) and to print their "status" buffer.
+*/
+
+void f_task_list(int idx)
+{
+  char line[BUF_LEN_LINE], *s_state=NULL ;
+  long long age_secs ;
+  long long now = esp_timer_get_time() ;
+
+  for (int slot=0 ; slot < DEF_MAX_USER_THREADS ; slot++)
+    if (G_runtime->utask[slot].state != UTHREAD_IDLE)
+    {
+      switch(G_runtime->utask[slot].state)
+      {
+        case UTHREAD_IDLE:
+          s_state = "idle" ; break ;
+        case UTHREAD_STARTING:
+          s_state = "starting" ; break ;
+        case UTHREAD_RUNNING:
+          s_state = "running" ; break ;
+        case UTHREAD_WRAPUP:
+          s_state = "wrapup" ; break ;
+        case UTHREAD_STOPPED:
+          s_state = "stopped" ; break ;
+        default:
+          s_state = "unknown" ; break ;
+      }
+      age_secs = (now - G_runtime->utask[slot].ts_start) / 1000000 ;
+
+      snprintf(line, BUF_LEN_LINE, "slot:%d %s(%s) age:%llds loop:%lld %s\r\n",
+               slot,
+               G_runtime->utask[slot].name, s_state, age_secs,
+               G_runtime->utask[slot].loop, G_runtime->utask[slot].status) ;
+      strncat(G_runtime->worker[idx].result_msg, line, BUF_LEN_WORKER_RESULT) ;
+    }
+  G_runtime->worker[idx].result_code = 200 ;
+}
+
+/*
    This is the lifecycle of a thread created by "xTaskCreatePinnedToCore()"
    in "f_task_start()".
 */
@@ -87,6 +127,8 @@
 void f_user_thread_lifecycle(void *param)
 {
   S_UserThread *self = (S_UserThread*) param ;
+  self->ts_start = esp_timer_get_time() ;
+
   if (G_runtime->config.debug)
     Serial.printf("DEBUG: f_user_thread_lifecycle() name:%s ft_addr:%x\r\n",
                   self->name, self->ft_addr) ;
@@ -231,13 +273,15 @@ void f_task_start(int idx, char *name)
       { ft_name = spec ; core = pos + 1 ; *pos = 0 ; }
   }
 
-  // identify and configure an available "S_UserThread" structure
+  // lock "L_uthread_setup" and configure an availble "S_UserThread" structure
 
+  xSemaphoreTake(G_runtime->L_uthread_setup, portMAX_DELAY) ;
   for (slot=0 ; slot < DEF_MAX_USER_THREADS ; slot++)
     if (G_runtime->utask[slot].state == UTHREAD_IDLE)
       break ;
   if (slot == DEF_MAX_USER_THREADS)
   {
+    xSemaphoreGive(G_runtime->L_uthread_setup) ;
     snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
              "At thread limit %d, cannot start new thread.\r\n", slot) ;
     G_runtime->worker[idx].result_code = 500 ;
@@ -248,6 +292,8 @@ void f_task_start(int idx, char *name)
 
   memset(&G_runtime->utask[slot], 0, sizeof(S_UserThread)) ;
   G_runtime->utask[slot].state = UTHREAD_STARTING ;
+  xSemaphoreGive(G_runtime->L_uthread_setup) ;
+
   strncpy(G_runtime->utask[slot].conf, args, DEF_MAX_THREAD_CONF) ;
   strncpy(G_runtime->utask[slot].name, name, DEF_MAX_USER_THREAD_NAME) ;
 
@@ -348,6 +394,9 @@ void f_task_cmd(int idx)
   if (count > 1) action = tokens[1] ;
   if (count > 2) name = tokens[2] ;
 
+  if (strcmp(action, "list") == 0)
+    f_task_list(idx) ;
+  else
   if ((strcmp(action, "start") == 0) && (name != NULL))
     f_task_start(idx, name) ;
   else
