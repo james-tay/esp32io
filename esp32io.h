@@ -38,6 +38,7 @@
 #define DEF_MAX_THREAD_LABELS 8         // labels per metric
 #define DEF_MAX_THREAD_CONF 80          // total bytes of all thread args
 #define DEF_MAX_THREAD_ARGS 8           // user defined arguments
+#define DEF_MAX_THREAD_WRAPUP_MSEC 3000 // how long before killing thread
 
 // user thread result value types
 
@@ -158,11 +159,11 @@ struct user_thread {
   int num_args ;                        // actual arguments in "in_args"
   char *in_args[DEF_MAX_THREAD_ARGS] ;  // fixed array to all possible args
   char conf[DEF_MAX_THREAD_CONF] ;      // buffer for all thread arguments
+  void (*ft_addr)(struct user_thread*) ; // the "<ft_task>" this thread runs
 
   // thread's runtime data and results come here
 
   S_ThreadResult result[DEF_MAX_THREAD_RESULTS] ;       // all metrics exposed
-
 
 } ; typedef struct user_thread S_UserThread ;
 

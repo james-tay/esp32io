@@ -77,7 +77,6 @@
    parsed into separate strings. Eventually the "conf" buffer looks like this,
 
      myfunc<\00>1<\00>50<\00>60<\00>70<\x00>
-
 */
 
 /*
@@ -88,18 +87,23 @@
 void f_user_thread_lifecycle(void *param)
 {
   S_UserThread *self = (S_UserThread*) param ;
-
-  for (int i=0 ; i < self->num_args ; i++)
-    Serial.printf("DEBUG: %s[%d]->%s\r\n", self->name, i, self->in_args[i]) ;
+  if (G_runtime->config.debug)
+    Serial.printf("DEBUG: f_user_thread_lifecycle() name:%s ft_addr:%x\r\n",
+                  self->name, self->ft_addr) ;
 
   // user thread's main loop
 
-  while (1)
+  while ((self->state == UTHREAD_STARTING) || (self->state == UTHREAD_RUNNING))
+  {
+    self->ft_addr(self) ;
+    self->loop++ ;
+    delay(1) ;
+  }
+
+  self->state = UTHREAD_STOPPED ; // set this, if user thread didn't already
+
+  while (1) // await death, freeRTOS doesn't like thread functions to return
     delay(1000) ;
-
-
-
-
 }
 
 /*
@@ -123,6 +127,23 @@ int f_read_single_line(char *filename, char *buf, int max_size)
 }
 
 /*
+   This function is called from "f_task_start()". Our job is to locate the
+   function "ft_name" and place its address into the "ft_addr" of the specified
+   user thread "slot". We return 1 on success, otherwise 0.
+*/
+
+int f_set_ft_addr(int slot, char *ft_name)
+{
+  if (strcmp(ft_name, "ft_wd") == 0)
+    G_runtime->utask[slot].ft_addr = ft_wd ;
+
+  if (G_runtime->utask[slot].ft_addr != NULL)
+    return(1) ;
+  else
+    return(0) ;
+}
+
+/*
    This function is called from "f_task_start()" when we're ready to start
    a user thread. Our job is to perform this action and set the "idx" worker's
    "result_code" and "result_msg" accordingly.
@@ -130,6 +151,10 @@ int f_read_single_line(char *filename, char *buf, int max_size)
 
 void f_task_create(int idx, int slot, int core, char *name)
 {
+  if (G_runtime->config.debug)
+    Serial.printf("DEBUG: f_task_create() name:%s ft_addr:%x\r\n",
+                  name, G_runtime->utask[slot].ft_addr) ;
+
   if (xTaskCreatePinnedToCore (
         f_user_thread_lifecycle,        // function to run
         name,                           // thread's name
@@ -165,9 +190,23 @@ void f_task_create(int idx, int slot, int core, char *name)
 
 void f_task_start(int idx, char *name)
 {
-  int amt, slot ;
+  int slot ;
   char line[BUF_LEN_LINE], filename[DEF_MAX_FILENAME_LEN] ;
   char *pos=NULL, *spec=NULL, *args=NULL, *ft_name=NULL, *core=NULL ;
+
+  // if a thread going by "name" is already running, don't continue
+
+  for (slot=0 ; slot < DEF_MAX_USER_THREADS ; slot++)
+    if (((G_runtime->utask[slot].state == UTHREAD_STARTING) ||
+         (G_runtime->utask[slot].state == UTHREAD_RUNNING)) &&
+        (strcmp(G_runtime->utask[slot].name, name) == 0))
+    {
+      snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+               "Thread '%s' is already running, loop %lld.\r\n",
+               name, G_runtime->utask[slot].loop) ;
+      G_runtime->worker[idx].result_code = 500 ;
+      return ;
+    }
 
   // read "/<name>.thread" and parse <thread_function>:<core>,[arg1,argN...]
 
@@ -192,7 +231,7 @@ void f_task_start(int idx, char *name)
       { ft_name = spec ; core = pos + 1 ; *pos = 0 ; }
   }
 
-  // identify and configure an "S_UserThread" structure
+  // identify and configure an available "S_UserThread" structure
 
   for (slot=0 ; slot < DEF_MAX_USER_THREADS ; slot++)
     if (G_runtime->utask[slot].state == UTHREAD_IDLE)
@@ -211,6 +250,17 @@ void f_task_start(int idx, char *name)
   G_runtime->utask[slot].state = UTHREAD_STARTING ;
   strncpy(G_runtime->utask[slot].conf, args, DEF_MAX_THREAD_CONF) ;
   strncpy(G_runtime->utask[slot].name, name, DEF_MAX_USER_THREAD_NAME) ;
+
+  // try identify and set the user thread function
+
+  if (f_set_ft_addr(slot, ft_name) == 0)
+  {
+    snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+             "Could not locate '%s' function address.\r\n", ft_name) ;
+    G_runtime->worker[idx].result_code = 400 ;
+    G_runtime->utask[slot].state = UTHREAD_IDLE ;
+    return ;
+  }
 
   // parse all user supplied task "args" into thread's "in_args" array.
 
@@ -253,9 +303,25 @@ void f_task_stop(int idx, char *name)
     return ;
   }
 
+  // put the thread into UTHREAD_WRAPUP, and give it some time to cleanup
 
+  long long now = esp_timer_get_time() ;
+  long long cutoff = now + (DEF_MAX_THREAD_WRAPUP_MSEC * 1000) ;
+  G_runtime->utask[slot].state = UTHREAD_WRAPUP ;
+  while ((now < cutoff) && (G_runtime->utask[slot].state == UTHREAD_WRAPUP))
+  {
+    delay(DEF_MAX_THREAD_WRAPUP_MSEC / 50) ;
+    now = esp_timer_get_time() ;
+  }
 
+  // terminate thread and then mark this slot as available for work
 
+  vTaskDelete (G_runtime->utask[slot].tid) ;
+  snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+           "Thread '%s' terminated after %lld loops.\r\n",
+           name, G_runtime->utask[slot].loop) ;
+  G_runtime->worker[idx].result_code = 200 ;
+  G_runtime->utask[slot].state = UTHREAD_IDLE ;
 }
 
 /*
