@@ -36,6 +36,7 @@
 #define DEF_MAX_USER_THREAD_NAME 16     // user defined thread's name
 #define DEF_MAX_THREAD_RESULTS 16       // number of metrics exposed
 #define DEF_MAX_THREAD_LABELS 8         // labels per metric
+#define DEF_MAX_THREAD_CONF 80          // total bytes of all thread args
 
 // user thread result value types
 
@@ -45,9 +46,10 @@
 
 // thread scheduling priorities
 
-#define DEF_WORKER_PRIORITY 1           // thread scheduling priority
-#define DEF_CONSOLE_THREAD_PRIORITY 2   // thread scheduling priority
-#define DEF_WEBSERVER_THREAD_PRIORITY 3 // thread scheduling priority
+#define DEF_WORKER_PRIORITY 1           // worker threads
+#define DEF_CONSOLE_THREAD_PRIORITY 2   // serial console thread
+#define DEF_WEBSERVER_THREAD_PRIORITY 3 // webserver (includes task dispatch)
+#define DEF_USER_THREAD_PRIORITY 4      // user task thread
 
 // various buffer sizes
 
@@ -68,6 +70,13 @@
 #define W_BUSY  2                       // thread is awake and running
 #define W_DONE  3                       // caller reads results and sets W_IDLE
 
+// user thread states
+
+#define UTHREAD_IDLE 0                  // ready for work
+#define UTHREAD_STARTING 1              // allocated for work, configuring now
+#define UTHREAD_RUNNING 2               // user thread's code is running
+#define UTHREAD_WRAPUP 3                // cleanup and prepare to terminate
+#define UTHREAD_STOPPED 4               // user thread's code is not running
 
 // This structure tracks a single (connected) HTTP client
 
@@ -124,6 +133,8 @@ struct camera_data {
 
 } ; typedef struct camera_data S_CamData ;
 
+// a single result in a user thread, to be exposed as a metric
+
 struct thread_result {
   int num_labels ;                      // number of labels for this metric
   char *l_name[DEF_MAX_THREAD_LABELS] ; // array of pointers to label names
@@ -136,12 +147,14 @@ struct thread_result {
 // This structure holds all data to support a single user task thread
 
 struct user_thread {
+  int state ;                           // user thread's current state
   TaskHandle_t tid ;                    // set by xTaskCreatePinnedToCore()
   char name[DEF_MAX_USER_THREAD_NAME] ; // user defined thread's name
   long long loop ;                      // calls to the thread's function
 
   // thread's user configuration comes here
 
+  char conf[DEF_MAX_THREAD_CONF] ;      // buffer for all thread arguments
 
   // thread's runtime data and results come here
 
