@@ -19,7 +19,6 @@
 #define DEF_RGBLED_PIN 48               // RGB led on ESP32-S3 dev board
 #define DEF_RGBLED_BLINK_MS 5           // how long LED stays on
 #define DEF_RGBLED_BLINK_INT_SEC 5      // how ofter to blink LED
-#define DEF_THREAD_STACKSIZE 8192       // stack size when thread is created
 #define DEF_WEBSERVER_EVENT_PORT 65501  // UDP mesg indicating task completion
 #define DEF_WEBSERVER_MAX_CLIENTS 4     // maximum concurrent HTTP clients
 #define DEF_WEBSERVER_MAX_IDLE_MS 8000  // disconnect idle http clients
@@ -29,6 +28,13 @@
 #define DEF_WIFI_CHK_INT_SECS 30        // how often to check wifi status
 #define DEF_MAX_FILENAME_LEN 30         // maximum filename length on SPIFFS
 #define DEF_NTP_TIMEOUT_MSEC 10000      // how long we wait for ntp to sync
+
+// stack sizes for various threads
+
+#define DEF_STACKSIZE_WORKER 8192       // worker threads
+#define DEF_STACKSIZE_WEBSERVER 4096    // webserver thread
+#define DEF_STACKSIZE_CONSOLE 3072      // serial console thread
+#define DEF_STACKSIZE_UTHREAD 8192      // user task thread
 
 // user thread limits
 
@@ -60,7 +66,7 @@
 #define BUF_LEN_WEB_URL 256             // maximum allowed URL length
 #define BUF_LEN_METRICS 2048            // buffer for "/metrics" response
 #define BUF_LEN_WORKER_NAME 12          // how long worker thread name is
-#define BUF_LEN_WORKER_RESULT 2048      // worker thread's "result_msg" buffer
+#define BUF_LEN_WORKER_RESULT 1024      // worker thread's "result_msg" buffer
 #define BUF_LEN_WIFI_SSID 32            // maximum wifi SSID allowed length
 #define BUF_LEN_WIFI_PW 64              // maximum wifi password allowed
 #define BUF_LEN_LINE 128                // generic metrics, http response, etc
@@ -151,6 +157,7 @@ struct thread_result {
 
 struct user_thread {
   int state ;                           // user thread's current state
+  int core ;                            // which CPU core thread runs on
   TaskHandle_t tid ;                    // set by xTaskCreatePinnedToCore()
   char name[DEF_MAX_USER_THREAD_NAME] ; // user defined thread's name
   long long loop ;                      // calls to the thread's function

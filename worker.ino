@@ -162,7 +162,8 @@ void f_action(int idx)
   // to modify "cmd" at this point.
 
   char token_buf[BUF_LEN_WEBCLIENT], *tokens[1], *keyword=NULL ;
-  strncpy(token_buf, G_runtime->worker[idx].cmd, BUF_LEN_WEBCLIENT) ;
+  strncpy(token_buf, G_runtime->worker[idx].cmd, BUF_LEN_WEBCLIENT-1) ;
+  token_buf[BUF_LEN_WEBCLIENT-1] = 0 ;
   if (f_parse(token_buf, tokens, 1) == 0)
   {
     strncpy(G_runtime->worker[idx].result_msg, "Missing command\r\n",

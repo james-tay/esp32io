@@ -81,11 +81,12 @@
 
 /*
    This function is called from "f_task_cmd()". Our job is to list all threads
-   running (or not running) and to print their "status" buffer.
+   which are not idle and to print info including their "status" buffer.
 */
 
 void f_task_list(int idx)
 {
+  int remainder ;
   char line[BUF_LEN_LINE], *s_state=NULL ;
   long long age_secs ;
   long long now = esp_timer_get_time() ;
@@ -109,12 +110,15 @@ void f_task_list(int idx)
           s_state = "unknown" ; break ;
       }
       age_secs = (now - G_runtime->utask[slot].ts_start) / 1000000 ;
-
-      snprintf(line, BUF_LEN_LINE, "slot:%d %s(%s) age:%llds loop:%lld %s\r\n",
+      snprintf(line, BUF_LEN_LINE,
+               "slot:%d %s:%d,%s age:%llds loop:%lld %s\r\n",
                slot,
-               G_runtime->utask[slot].name, s_state, age_secs,
+               G_runtime->utask[slot].name, G_runtime->utask[slot].core,
+               s_state, age_secs,
                G_runtime->utask[slot].loop, G_runtime->utask[slot].status) ;
-      strncat(G_runtime->worker[idx].result_msg, line, BUF_LEN_WORKER_RESULT) ;
+      remainder = BUF_LEN_WORKER_RESULT -
+                    strlen(G_runtime->worker[idx].result_msg) ;
+      strncat(G_runtime->worker[idx].result_msg, line, remainder) ;
     }
   G_runtime->worker[idx].result_code = 200 ;
 }
@@ -200,7 +204,7 @@ void f_task_create(int idx, int slot, int core, char *name)
   if (xTaskCreatePinnedToCore (
         f_user_thread_lifecycle,        // function to run
         name,                           // thread's name
-        DEF_THREAD_STACKSIZE,           // thread's stacksize
+        DEF_STACKSIZE_UTHREAD,          // thread's stacksize
         &G_runtime->utask[slot],        // param to pass into thread
         DEF_USER_THREAD_PRIORITY,       // priority (higher is more important)
         &G_runtime->utask[slot].tid,    // task handle
@@ -273,7 +277,7 @@ void f_task_start(int idx, char *name)
       { ft_name = spec ; core = pos + 1 ; *pos = 0 ; }
   }
 
-  // lock "L_uthread_setup" and configure an availble "S_UserThread" structure
+  // lock "L_uthread_setup" and grab an availble "S_UserThread" structure
 
   xSemaphoreTake(G_runtime->L_uthread_setup, portMAX_DELAY) ;
   for (slot=0 ; slot < DEF_MAX_USER_THREADS ; slot++)
@@ -291,11 +295,12 @@ void f_task_start(int idx, char *name)
   // initialize the S_UserThread data structure
 
   memset(&G_runtime->utask[slot], 0, sizeof(S_UserThread)) ;
-  G_runtime->utask[slot].state = UTHREAD_STARTING ;
+  G_runtime->utask[slot].state = UTHREAD_STARTING ;     // indicate as taken
   xSemaphoreGive(G_runtime->L_uthread_setup) ;
 
-  strncpy(G_runtime->utask[slot].conf, args, DEF_MAX_THREAD_CONF) ;
-  strncpy(G_runtime->utask[slot].name, name, DEF_MAX_USER_THREAD_NAME) ;
+  strncpy(G_runtime->utask[slot].conf, args, DEF_MAX_THREAD_CONF-1) ;
+  strncpy(G_runtime->utask[slot].name, name, DEF_MAX_USER_THREAD_NAME-1) ;
+  G_runtime->utask[slot].core = atoi(core) ;
 
   // try identify and set the user thread function
 
@@ -304,14 +309,17 @@ void f_task_start(int idx, char *name)
     snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
              "Could not locate '%s' function address.\r\n", ft_name) ;
     G_runtime->worker[idx].result_code = 400 ;
-    G_runtime->utask[slot].state = UTHREAD_IDLE ;
+    G_runtime->utask[slot].state = UTHREAD_IDLE ;       // release this slot
     return ;
   }
 
-  // parse all user supplied task "args" into thread's "in_args" array.
+  // have "args" point to the slot's "conf" since this is now a persistent
+  // buffer. Use it to parse all user supplied task "args" into thread's
+  // "in_args" array.
 
   int num=0 ;
   char *p=NULL ;
+  args = G_runtime->utask[slot].conf ;
   G_runtime->utask[slot].in_args[num] = strtok_r(args, ",", &p) ;
   if (G_runtime->utask[slot].in_args[num] != NULL)
     for (num=1 ; num < DEF_MAX_THREAD_ARGS ; num++)

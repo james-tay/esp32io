@@ -358,7 +358,7 @@ void setup ()
   xTaskCreatePinnedToCore (
     f_serial_console_thread,            // function to run
     "thr_console",                      // name which shows up in crash dumps
-    DEF_THREAD_STACKSIZE,               // stack size
+    DEF_STACKSIZE_CONSOLE,              // stack size
     NULL,                               // param to pass into thread
     DEF_CONSOLE_THREAD_PRIORITY,        // priority (higher is more important)
     &G_runtime->sconsole_handle,        // task handle
@@ -369,7 +369,7 @@ void setup ()
   xTaskCreatePinnedToCore (
     f_webserver_thread,                 // function to run
     "thr_webserver",                    // name which shows up in crash dumps
-    DEF_THREAD_STACKSIZE,               // stack size
+    DEF_STACKSIZE_WEBSERVER,            // stack size
     NULL,                               // param to pass into thread
     DEF_WEBSERVER_THREAD_PRIORITY,      // priority (higher is more important)
     NULL,                               // task handle
@@ -384,7 +384,7 @@ void setup ()
     xTaskCreatePinnedToCore (
       f_worker_thread,                  // function to run
       G_runtime->worker[i].name,        // name which shows up in crash dumps
-      DEF_THREAD_STACKSIZE,             // stack size
+      DEF_STACKSIZE_WORKER,             // stack size
       &G_runtime->worker[i].id,         // param to pass into thread
       DEF_WORKER_PRIORITY,              // priority (higher is more important)
       &G_runtime->worker[i].w_handle,   // task handle
