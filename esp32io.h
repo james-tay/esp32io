@@ -239,7 +239,7 @@ struct runtime_data {
 
   SemaphoreHandle_t L_worker ;          // "next_worker"
   SemaphoreHandle_t L_serial_in ;       // unlocked when serial data arrives
-  SemaphoreHandle_t L_uthread_setup ;   // lock when assigning a user thread
+  SemaphoreHandle_t L_uthread ;         // lock at thread setup and termination
 
   // various performance metrics
 

@@ -6,6 +6,13 @@
 
 void ft_wd(S_UserThread *self)
 {
+  if (self->num_args != 3)              // don't run if our params are wrong
+  {
+    strncpy(self->status, "Incorrect arguments", BUF_LEN_UTHREAD_STATUS) ;
+    self->state = UTHREAD_STOPPED ;
+    return ;
+  }
+
   if (self->loop == 0)
     self->state = UTHREAD_RUNNING ;
 

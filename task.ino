@@ -58,9 +58,14 @@
      (set by user thread once it is done)
      UTHREAD_STOPPED    - thread is no longer doing any work
 
-   Threads are terminated by us using "vTaskDelete()". Before forcefully
-   terminating them, the thread's state will be set to THREAD_WRAPUP, and
-   the thread will have some amount of time to finish up.
+   Threads are terminated by us using "vTaskDelete()". If the user forcefully
+   terminates a thread, the thread's state will be set to THREAD_WRAPUP, and
+   the thread will have some amount of time to finish up. A thread may also
+   choose to self terminate (eg, incorrect configuration or permanent error).
+   In this case, the thread sets its state to UTHREAD_STOPPED and returns. The
+   user thread function won't get called anymore but the (freeRTOS) thread is
+   still running. The main thread periodically scans for this and cleans up
+   the thread with a "vTaskDelete()".
 
    THREAD CONFIGURATION DATA STRUCTURES
 
@@ -92,7 +97,7 @@ void f_task_list(int idx)
   long long now = esp_timer_get_time() ;
 
   for (int slot=0 ; slot < DEF_MAX_USER_THREADS ; slot++)
-    if (G_runtime->utask[slot].state != UTHREAD_IDLE)
+    if (strlen(G_runtime->utask[slot].name) > 0)
     {
       switch(G_runtime->utask[slot].state)
       {
@@ -111,7 +116,7 @@ void f_task_list(int idx)
       }
       age_secs = (now - G_runtime->utask[slot].ts_start) / 1000000 ;
       snprintf(line, BUF_LEN_LINE,
-               "slot:%d %s:%d,%s age:%llds loop:%lld %s\r\n",
+               "slot:%d %s:%d,%s age:%llds loop:%lld status:%s\r\n",
                slot,
                G_runtime->utask[slot].name, G_runtime->utask[slot].core,
                s_state, age_secs,
@@ -277,15 +282,15 @@ void f_task_start(int idx, char *name)
       { ft_name = spec ; core = pos + 1 ; *pos = 0 ; }
   }
 
-  // lock "L_uthread_setup" and grab an availble "S_UserThread" structure
+  // lock "L_uthread" and grab an availble "S_UserThread" structure
 
-  xSemaphoreTake(G_runtime->L_uthread_setup, portMAX_DELAY) ;
+  xSemaphoreTake(G_runtime->L_uthread, portMAX_DELAY) ;
   for (slot=0 ; slot < DEF_MAX_USER_THREADS ; slot++)
     if (G_runtime->utask[slot].state == UTHREAD_IDLE)
       break ;
   if (slot == DEF_MAX_USER_THREADS)
   {
-    xSemaphoreGive(G_runtime->L_uthread_setup) ;
+    xSemaphoreGive(G_runtime->L_uthread) ;
     snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
              "At thread limit %d, cannot start new thread.\r\n", slot) ;
     G_runtime->worker[idx].result_code = 500 ;
@@ -296,7 +301,7 @@ void f_task_start(int idx, char *name)
 
   memset(&G_runtime->utask[slot], 0, sizeof(S_UserThread)) ;
   G_runtime->utask[slot].state = UTHREAD_STARTING ;     // indicate as taken
-  xSemaphoreGive(G_runtime->L_uthread_setup) ;
+  xSemaphoreGive(G_runtime->L_uthread) ;
 
   strncpy(G_runtime->utask[slot].conf, args, DEF_MAX_THREAD_CONF-1) ;
   strncpy(G_runtime->utask[slot].name, name, DEF_MAX_USER_THREAD_NAME-1) ;
@@ -368,14 +373,22 @@ void f_task_stop(int idx, char *name)
     now = esp_timer_get_time() ;
   }
 
-  // terminate thread and then mark this slot as available for work
+  // terminate thread and then mark this slot as available for work. To
+  // prevent double killing, acquire "L_uthread".
 
-  vTaskDelete (G_runtime->utask[slot].tid) ;
+  xSemaphoreTake(G_runtime->L_uthread, portMAX_DELAY) ;
+  if ((G_runtime->utask[slot].state == UTHREAD_WRAPUP) or
+      (G_runtime->utask[slot].state == UTHREAD_STOPPED))
+  {
+    vTaskDelete(G_runtime->utask[slot].tid) ;
+    G_runtime->utask[slot].state = UTHREAD_IDLE ;
+  }
+  xSemaphoreGive(G_runtime->L_uthread) ;
+
   snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
            "Thread '%s' terminated after %lld loops.\r\n",
            name, G_runtime->utask[slot].loop) ;
   G_runtime->worker[idx].result_code = 200 ;
-  G_runtime->utask[slot].state = UTHREAD_IDLE ;
 }
 
 /*

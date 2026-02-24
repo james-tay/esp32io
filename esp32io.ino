@@ -323,7 +323,7 @@ void f_serial_console_thread(void *param)
 
 // ============================================================================
 
-void setup ()
+void setup()
 {
   delay (1000) ;
 
@@ -332,7 +332,7 @@ void setup ()
   G_runtime = (S_RuntimeData*) malloc(sizeof(S_RuntimeData)) ;
   memset(G_runtime, 0, sizeof(S_RuntimeData)) ;
   G_runtime->L_worker = xSemaphoreCreateMutex() ;
-  G_runtime->L_uthread_setup = xSemaphoreCreateMutex() ;
+  G_runtime->L_uthread = xSemaphoreCreateMutex() ;
   G_runtime->L_serial_in = xSemaphoreCreateBinary() ;
   G_runtime->config.wifi_check_secs = DEF_WIFI_CHK_INT_SECS ;
 
@@ -419,7 +419,7 @@ void setup ()
   neopixelWrite(DEF_RGBLED_PIN, 0, 0, 0) ;
 }
 
-void loop ()
+void loop()
 {
   long long now = esp_timer_get_time() ;
 
@@ -454,6 +454,23 @@ void loop ()
     neopixelWrite(DEF_RGBLED_PIN, 255, 0, 0) ;
     delay(1000) ;
     ESP.restart() ;
+  }
+
+  // periodically check if user task threads exited (voluntarily)
+
+  if (xSemaphoreTake(G_runtime->L_uthread, 0) == pdTRUE)
+  {
+    for (int slot=0 ; slot < DEF_MAX_USER_THREADS ; slot++)
+      if (G_runtime->utask[slot].state == UTHREAD_STOPPED)
+      {
+        vTaskDelete(G_runtime->utask[slot].tid) ;
+        G_runtime->utask[slot].state = UTHREAD_IDLE ;
+        if (G_runtime->config.debug)
+          Serial.printf("DEBUG: loop() reaped thread '%s' at loop %lld.\r\n",
+                        G_runtime->utask[slot].name,
+                        G_runtime->utask[slot].loop) ;
+      }
+    xSemaphoreGive(G_runtime->L_uthread) ;
   }
 
   delay (1000) ;
