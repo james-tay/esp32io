@@ -66,11 +66,29 @@ void f_url_decode(char *src)
 
 /*
    This function is called from "f_handle_webrequest()" when it has been
+   determined that the webclient wants to scrape metrics. This function
+   iterates through active user task threads and renders metrics for all
+   result values exposed.
+*/
+
+void f_handle_utask_metrics(int idx)
+{
+  for (int slot=0 ; slot < DEF_MAX_USER_THREADS ; slot++)
+    if (G_runtime->utask[slot].state == UTHREAD_RUNNING)
+    {
+
+
+
+    }
+}
+
+/*
+   This function is called from "f_handle_webrequest()" when it has been
    determined that the webclient wants to scrape metrics. All this function
    does is to walk through all available metrics and send them to the client.
 */
 
-void f_handle_metrics(int idx)
+void f_handle_core_metrics(int idx)
 {
   S_RuntimeData *r = G_runtime ; // macro since we're referencing it a lot
   int l = BUF_LEN_LINE ;         // macro to shorten the subsequent statements
@@ -213,7 +231,8 @@ void f_handle_webrequest(int idx, char *method, char *uri)
   if ((strcmp(method, "GET") == 0) &&
       (strcmp(G_runtime->url_path, "/metrics") == 0))
   {
-    f_handle_metrics(idx) ;
+    f_handle_core_metrics(idx) ;
+    f_handle_utask_metrics(idx) ;
     f_close_webclient(idx) ;
     return ;
   }

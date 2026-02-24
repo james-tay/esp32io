@@ -1,4 +1,24 @@
 /*
+   This is a convenience function which reads from "filename", writing up to
+   "max_size" bytes into "buf". On success the number of bytes is returned,
+   otherwise -1 to indicate something went wrong (probably no such file).
+*/
+
+int f_read_single_line(char *filename, char *buf, int max_size)
+{
+  File f = SPIFFS.open(filename, "r") ;
+  if (f.size() < 1)
+    return(-1) ;                                // file is probabl absent
+
+  int amt = f.readBytes(buf, max_size-1) ;
+  if (amt > 0)
+    buf[amt] = 0 ;
+
+  f.close() ;
+  return(amt) ;
+}
+
+/*
    This function is called from "f_fs_cmd()". Our job is to print out as much
    info as we can on our flash storage.
 */

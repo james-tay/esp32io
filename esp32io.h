@@ -51,6 +51,7 @@
 #define UTHREAD_RESULT_NONE 0           // no user thread result saved here
 #define UTHREAD_RESULT_INT 1            // an "int" data type
 #define UTHREAD_RESULT_FLOAT 2          // a "float" data type
+#define UTHREAD_RESULT_LONGLONG 3       // a "long long" data type
 
 // thread scheduling priorities
 
@@ -149,8 +150,9 @@ struct thread_result {
   char *l_name[DEF_MAX_THREAD_LABELS] ; // array of pointers to label names
   char *l_data[DEF_MAX_THREAD_LABELS] ; // array of pointers to label values
   char result_type ;                    // whether result is "int" or "float"
-  int i_value ;                         // this result's value
-  double f_value ;                      // this result's value
+  int i_value ;                         // this result's int value
+  double f_value ;                      // this result's float value
+  long long ll_value ;                  // this result's long long value
 } ; typedef struct thread_result S_ThreadResult ;
 
 // This structure holds all data to support a single user task thread
