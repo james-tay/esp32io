@@ -24,10 +24,10 @@ void ft_wd(S_UserThread *self)
 
     self->result[0].result_type = UTHREAD_RESULT_LONGLONG ;
     self->result[0].l_name[0] = "last_activity_sec" ;
-    self->result[0].l_data[0] = "\"console\"" ;
+    self->result[0].l_data[0] = "console" ;
     self->result[1].result_type = UTHREAD_RESULT_LONGLONG ;
     self->result[1].l_name[0] = "last_activity_sec" ;
-    self->result[1].l_data[0] = "\"webserver\"" ;
+    self->result[1].l_data[0] = "webserver" ;
   }
 
   int startup_ignore_secs = atoi(self->in_args[0]) ;
