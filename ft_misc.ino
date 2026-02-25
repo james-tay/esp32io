@@ -46,5 +46,15 @@ void ft_wd(S_UserThread *self)
              check_interval_secs,
              no_activity_reboot_secs) ;
 
+  // if both console and webserver idle is too large, reboot immediately
+
+  if ((self->result[0].ll_value > no_activity_reboot_secs) &&
+      (self->result[1].ll_value > no_activity_reboot_secs))
+  {
+    Serial.printf("FATAL! Watchdog triggered, rebooting.\r\n") ;
+    delay(1000) ;
+    ESP.restart() ;
+  }
+
   delay (check_interval_secs * 1000) ;
 }
