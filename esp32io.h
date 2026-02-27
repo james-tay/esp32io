@@ -28,6 +28,9 @@
 #define DEF_WIFI_CHK_INT_SECS 30        // how often to check wifi status
 #define DEF_MAX_FILENAME_LEN 30         // maximum filename length on SPIFFS
 #define DEF_NTP_TIMEOUT_MSEC 10000      // how long we wait for ntp to sync
+#define DEF_INIT_THREAD_START_SECS 60   // autorun "/init.thread" at this time
+#define DEF_ANON_CALLER -255            // anonymous worker thread "caller"
+#define DEF_UTHREAD_CALLER_OFFSET 1000  // user task thread's "caller" offset
 
 // stack sizes for various threads
 
@@ -191,6 +194,7 @@ struct config_data {
 
   // misc settings
 
+  int init_delay_secs ;                 // secs before running "/init.thread"
   int debug ;                           // 0=none, 1=info
 
 } ; typedef struct config_data S_ConfigData ;

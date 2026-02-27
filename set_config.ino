@@ -23,7 +23,18 @@ void f_load_config()
     }
     f.close() ;
   }
-
+  f = SPIFFS.open("/init_delay_secs.cfg", "r") ;        // init_delay_secs
+  if (f)
+  {
+    int amt = f.readBytes(s, BUF_LEN_LINE-1) ;
+    if (amt > 0)
+    {
+      G_runtime->config.init_delay_secs = atoi(s) ;
+      Serial.printf("BOOT: read from /init_delay_secs.cfg -> %d.\r\n",
+                    G_runtime->config.init_delay_secs) ;
+    }
+    f.close() ;
+  }
   f = SPIFFS.open("/wifi_ssid.cfg", "r") ;              // wifi_ssid
   if (f)
   {
@@ -37,7 +48,6 @@ void f_load_config()
       G_runtime->config.wifi_ssid[0] = 0 ;
     f.close() ;
   }
-
   f = SPIFFS.open("/wifi_pw.cfg", "r") ;                // wifi_pw
   if (f)
   {
@@ -51,7 +61,6 @@ void f_load_config()
       G_runtime->config.wifi_pw[0] = 0 ;
     f.close() ;
   }
-
   f = SPIFFS.open("/wifi_check_secs.cfg", "r") ;        // wifi_check_secs
   if (f)
   {
@@ -83,6 +92,7 @@ void f_set_cmd(int idx)
   {
     strncpy(G_runtime->worker[idx].result_msg,
       "debug            <int>\r\n"
+      "init_delay_secs  <int>\r\n"
       "wifi_ssid        <string>\r\n"
       "wifi_pw          <string>\r\n"
       "wifi_check_secs  <int>\r\n",
@@ -105,6 +115,13 @@ void f_set_cmd(int idx)
     G_runtime->config.debug = atoi(value) ;
     snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
              "%s -> %d.\r\n", key, G_runtime->config.debug) ;
+  }
+  else
+  if (strcmp(key, "init_delay_secs") == 0)
+  {
+    G_runtime->config.init_delay_secs = atoi(value) ;
+    snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+             "%s -> %d.\r\n", key, G_runtime->config.init_delay_secs) ;
   }
   else
   if (strcmp(key, "wifi_ssid") == 0)

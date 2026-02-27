@@ -32,7 +32,7 @@
    which is the calling webclient "idx".
 
    In general, all internal threads (eg, webserver, workers, etc) will run on
-   core-0. We'll try to reserve core-1 for user threads which might be time
+   core:0. We'll try to reserve core:1 for user threads which might be time
    or performance critical.
 
    The following diagram is a summary of how commands, and their results are
@@ -144,6 +144,46 @@
    Then they get loaded into,
      G_runtime->config.wifi_ssid
      G_runtime->config.wifi_pw
+
+   COMMAND EXECUTION
+
+   In general, commands are entered from the serial console, or via the web
+   server. In either scenario, a worker thread is identified and
+
+     1. its "cmd" is pointed to the buffer containing the command.
+     2. its "caller" is set to the webclient index, or "-1" if serial console.
+
+   The worker thread is awoken via "xTaskNotifyGive()". At this point the
+   worker thread will,
+
+     1. reset its "result_msg" and "result_code"
+     2. calls "f_action()" which evaluates the "cmd". At the end of this stage,
+        the worker thread's "result_msg" and "result_code" will be set to
+        indicate outcome.
+     3. notify the caller that its command results are ready,
+        a) for the serial console, the worker calls "xTaskNotifyGive()" to
+           unblock the serial console thread.
+        b) for a web client, the worker sends a UDP packet which indicates
+           the web client index the result is meant for.
+
+   Expanding on this mechanism, consider the scenario where a user task thread
+   intends to ride on the commands supported by "f_action()". Along the same
+   lines, consider a series of commands which a user task thread wants to
+   execute. In such scenarios, the user task thread hands off the "cmd" to
+   a worker thread, similar to how it's handled by the serial console thread.
+   However, the user task thread sets the worker thread's "caller" to a value
+   "DEF_UTHREAD_CALLER_OFFSET + <user_task_thread_slot>". In this way, a
+   worker thread can identify the user task thread, and thus signal work
+   completion appropriately.
+
+   When this program boots up, we want user defined actions performed
+   automatically after a certain boot up delay (eg, after 60 secs). These
+   actions could configure a camera or set certain pin states, etc. This
+   is done by the main "loop()" once our uptime crosses this boot up period.
+   Essentially a worker thread is assigned the "task start init" command. In
+   this context, the worker thread's "caller" is set to -255 (ie, anonymous).
+   Thus, the user can provide the "/init.thread" file, which will be started
+   automatically after boot.
 */
 
 // my custom header
@@ -335,6 +375,7 @@ void setup()
   G_runtime->L_uthread = xSemaphoreCreateMutex() ;
   G_runtime->L_serial_in = xSemaphoreCreateBinary() ;
   G_runtime->config.wifi_check_secs = DEF_WIFI_CHK_INT_SECS ;
+  G_runtime->config.init_delay_secs = DEF_INIT_THREAD_START_SECS ;
 
   // print out some info to show that we're booting up
 
@@ -437,6 +478,21 @@ void loop()
     G_runtime->ts_last_blink += DEF_RGBLED_BLINK_INT_SEC * 1000000 ;
   }
 
+  // if it's time to run "/init.thread", do it now
+
+  if ((G_runtime->config.init_delay_secs != 0) &&
+      (now / 1000000 > G_runtime->config.init_delay_secs))
+  {
+    if (G_runtime->config.debug)
+      Serial.printf("DEBUG: main thread is running '/init.thread'.\r\n") ;
+
+
+
+    G_runtime->config.init_delay_secs = 0 ; // this disables another run
+  }
+
+  // periodically check if our wifi is not connected, and reconnect if needed
+
   if (now > G_runtime->ts_last_wifi_check +
             (G_runtime->config.wifi_check_secs * 1000000))
   {
@@ -447,10 +503,10 @@ void loop()
     G_runtime->ts_last_wifi_check = now ;
   }
 
+  // if user requested a reload, set LED to red until we die
+
   if (G_runtime->request_reload)
   {
-    // user requested a reload. Set LED to red until we die
-
     neopixelWrite(DEF_RGBLED_PIN, 255, 0, 0) ;
     delay(1000) ;
     ESP.restart() ;
