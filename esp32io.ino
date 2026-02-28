@@ -486,8 +486,13 @@ void loop()
     if (G_runtime->config.debug)
       Serial.printf("DEBUG: main thread is running '/init.thread'.\r\n") ;
 
+    // "cmd" must point to a writable buffer because of "f_parse()"
+    strncpy(G_runtime->cmd_buf, "task start init", BUF_LEN_LINE) ;
 
-
+    int tid = f_get_next_worker() ;
+    G_runtime->worker[tid].caller = DEF_ANON_CALLER ;
+    G_runtime->worker[tid].cmd = G_runtime->cmd_buf ;
+    xTaskNotifyGive(G_runtime->worker[tid].w_handle) ;
     G_runtime->config.init_delay_secs = 0 ; // this disables another run
   }
 

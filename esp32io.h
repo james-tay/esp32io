@@ -211,6 +211,7 @@ struct runtime_data {
 
   int fs_online ;                       // what SPIFFS.begin() returned
   int request_reload ;                  // 0=normal, 1=reload
+  char cmd_buf[BUF_LEN_LINE] ;          // used in main "loop()"
   long long ts_last_blink ;             // timestamp of last LED blink
   long long ts_last_wifi_check ;        // timestamp of last wifi status check
 

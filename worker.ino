@@ -285,6 +285,16 @@ void f_worker_thread(void *param)
 
     // notify the caller that we're done
 
+    if (G_runtime->worker[myidx].caller == DEF_ANON_CALLER)     // anonymous
+    {
+      if (G_runtime->config.debug)
+        Serial.printf("DEBUG: worker%d expiring anonymous cmd code:%d msg:%s",
+                      myidx,
+                      G_runtime->worker[myidx].result_code,
+                      G_runtime->worker[myidx].result_msg) ;
+      G_runtime->worker[myidx].state = W_IDLE ;
+    }
+    else
     if (G_runtime->worker[myidx].caller < 0)    // serial console thread
     {
       xTaskNotifyGive(G_runtime->sconsole_handle) ;

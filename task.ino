@@ -85,6 +85,25 @@
 */
 
 /*
+   This function is called from "f_task_cmd()". Our job is to print out some
+   help references for all supported user task thread functions.
+*/
+
+void f_task_help(int idx)
+{
+  strncpy(G_runtime->worker[idx].result_msg,
+          "[Thread Config Files]\r\n"
+          "/init.thread         system default boot up tasks\r\n"
+          "/<name>.thread       configures thread function and params\r\n"
+          "/<name>.labels       set metric name and labels (optional)\r\n"
+          "\r\n"
+          "[User Task Threads - Config Refrence]\r\n"
+          "ft_wg:<c>,<startupSecs>,<intervalSecs>,<noActivitySecs>\r\n",
+          BUF_LEN_WORKER_RESULT) ;
+  G_runtime->worker[idx].result_code = 400 ;
+}
+
+/*
    This function is called from "f_task_cmd()". Our job is to list all threads
    which are not idle and to print info including their "status" buffer.
 */
@@ -262,6 +281,16 @@ void f_task_start(int idx, char *name)
       { ft_name = spec ; core = pos + 1 ; *pos = 0 ; }
   }
 
+  // check that we parsed everything we need
+
+  if ((ft_name == NULL) || (core == NULL) || (args == NULL))
+  {
+    strncpy(G_runtime->worker[idx].result_msg, "Invalid thread config.\r\n",
+            BUF_LEN_WORKER_RESULT) ;
+    G_runtime->worker[idx].result_code = 400 ;
+    return ;
+  }
+
   // lock "L_uthread" and grab an availble "S_UserThread" structure
 
   xSemaphoreTake(G_runtime->L_uthread, portMAX_DELAY) ;
@@ -385,6 +414,7 @@ void f_task_cmd(int idx)
   if (count == 1)
   {
     strncpy(G_runtime->worker[idx].result_msg,
+            "task help          print user thread param references\r\n"
             "task list          list all current user threads\r\n"
             "task start <name>  start a thread\r\n"
             "task stop <name>   stop a thread\r\n",
@@ -396,6 +426,9 @@ void f_task_cmd(int idx)
   if (count > 1) action = tokens[1] ;
   if (count > 2) name = tokens[2] ;
 
+  if (strcmp(action, "help") == 0)
+    f_task_help(idx) ;
+  else
   if (strcmp(action, "list") == 0)
     f_task_list(idx) ;
   else
