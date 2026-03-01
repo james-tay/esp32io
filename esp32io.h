@@ -56,7 +56,7 @@
 #define UTHREAD_RESULT_FLOAT 2          // a "float" data type
 #define UTHREAD_RESULT_LONGLONG 3       // a "long long" data type
 
-// thread scheduling priorities
+// thread scheduling priorities (higher means more important)
 
 #define DEF_WORKER_PRIORITY 1           // worker threads
 #define DEF_CONSOLE_THREAD_PRIORITY 2   // serial console thread

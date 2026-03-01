@@ -103,6 +103,55 @@ void f_hi_lo_cmd(int idx)
 }
 
 /*
+   This function is called from "f_action()", our job is to print thread info,
+   since there's no such thing as "processes" in FreeRTOS anyway.
+*/
+
+void f_ps_cmd(int idx)
+{
+  #define MAX_TASK_THREADS 20 // the maximum number of thread we'd handle
+  char s[BUF_LEN_LINE] ;
+
+  // print header and then see how many threads are currently present
+
+  snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+           "%-16s %5s %3s %6s %10s\r\n%-16s %5s %3s %6s %10s\r\n",
+           "TASK", "STATE", "PRI", "S_FREE", "CPU(us)",
+           "----", "-----", "---", "------", "-------") ;
+
+  UBaseType_t num_tasks = uxTaskGetNumberOfTasks() ;
+  if (num_tasks > MAX_TASK_THREADS) // we'll use stack memory, limit array size
+    num_tasks = MAX_TASK_THREADS ;
+  TaskStatus_t task_array[num_tasks] ;
+  num_tasks = uxTaskGetSystemState(task_array, num_tasks, NULL) ;
+
+  // now print info on each thread
+
+  for (int n=0 ; n < num_tasks ; n++)
+  {
+    char *state = "unknown" ;
+    switch(task_array[n].eCurrentState)
+    {
+      case eRunning:   state = "run"   ; break ;
+      case eReady:     state = "ready" ; break ;
+      case eBlocked:   state = "block" ; break ;
+      case eSuspended: state = "susp"  ; break ;
+      case eDeleted:   state = "del"   ; break ;
+      case eInvalid:   state = "inval" ; break ;
+    }
+    int remainder = BUF_LEN_WORKER_RESULT -
+                    strlen(G_runtime->worker[idx].result_msg) ;
+    snprintf(s, BUF_LEN_LINE, "%-16s %5s %3d %6d %10lu\r\n",
+             task_array[n].pcTaskName, state,
+             task_array[n].uxCurrentPriority,
+             task_array[n].usStackHighWaterMark,
+             task_array[n].ulRunTimeCounter) ;
+    strncat(G_runtime->worker[idx].result_msg, s, remainder-1) ;
+  }
+  G_runtime->worker[idx].result_code = 200 ;
+}
+
+/*
    This function is called from "f_action()", our job is to print our current
    uptime.
 */
@@ -206,11 +255,7 @@ void f_action(int idx)
     f_fs_cmd(idx) ;
   else
   if (strcmp(keyword, "ps") == 0)                               // ps
-  {
-    //vTaskGetRunTimeStats(G_runtime->worker[idx].result_msg) ;
-    vTaskList(G_runtime->worker[idx].result_msg) ;
-    G_runtime->worker[idx].result_code = 200 ;
-  }
+    f_ps_cmd(idx) ;
   else
   if (strcmp(keyword, "lo") == 0)                               // lo
     f_hi_lo_cmd(idx) ;
