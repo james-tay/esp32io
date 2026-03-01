@@ -8,11 +8,31 @@ int f_read_single_line(char *filename, char *buf, int max_size)
 {
   File f = SPIFFS.open(filename, "r") ;
   if (f.size() < 1)
-    return(-1) ;                                // file is probabl absent
+    return(-1) ;                                // file is probably absent
 
-  int amt = f.readBytes(buf, max_size-1) ;
+  int amt = f.readBytesUntil('\n', buf, max_size-1) ;
   if (amt > 0)
     buf[amt] = 0 ;
+
+  f.close() ;
+  return(amt) ;
+}
+
+/*
+   This is a convenience function which reads from "filename", writing the
+   entire contents of the file into "buf", but at most "max_size" bytes. The
+   total number of bytes placed into "buf" is returned, or "-1" if something
+   went wrong (probably no such file).
+*/
+
+int f_read_whole(char *filename, char *buf, int max_size)
+{
+  int amt=0 ;
+  File f = SPIFFS.open(filename, "r") ;
+  if (f.size() < 1)
+    return(-1) ;                                // file is probably absent
+
+
 
   f.close() ;
   return(amt) ;

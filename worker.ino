@@ -207,7 +207,8 @@ void f_action(int idx)
   else
   if (strcmp(keyword, "ps") == 0)                               // ps
   {
-    vTaskGetRunTimeStats(G_runtime->worker[idx].result_msg) ;
+    //vTaskGetRunTimeStats(G_runtime->worker[idx].result_msg) ;
+    vTaskList(G_runtime->worker[idx].result_msg) ;
     G_runtime->worker[idx].result_code = 200 ;
   }
   else

@@ -75,6 +75,7 @@
 #define BUF_LEN_WIFI_PW 64              // maximum wifi password allowed
 #define BUF_LEN_LINE 128                // generic metrics, http response, etc
 #define BUF_LEN_UTHREAD_STATUS 80       // optional user thread status message
+#define BUF_LEN_UTASK_FILESIZE 1024     // max size of user task files
 
 // worker thread states
 
@@ -173,7 +174,7 @@ struct user_thread {
   int num_args ;                        // actual arguments in "in_args"
   char *in_args[DEF_MAX_THREAD_ARGS] ;  // fixed array to all possible args
   char conf[DEF_MAX_THREAD_CONF] ;      // buffer for all thread arguments
-  void (*ft_addr)(struct user_thread*) ; // the "<ft_task>" this thread runs
+  void (*ft_addr)(struct user_thread*) ; // the "<ft_xxx>()" this thread runs
 
   // thread's runtime data and results come here
 
