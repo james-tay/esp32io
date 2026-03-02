@@ -32,7 +32,9 @@ int f_read_whole(char *filename, char *buf, int max_size)
   if (f.size() < 1)
     return(-1) ;                                // file is probably absent
 
-
+  amt = f.readBytes(buf, max_size-1) ;
+  if (amt > 0)
+    buf[amt] = 0 ;
 
   f.close() ;
   return(amt) ;

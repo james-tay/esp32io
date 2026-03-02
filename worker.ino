@@ -331,7 +331,8 @@ void f_worker_thread(void *param)
 
     // notify the caller that we're done
 
-    if (G_runtime->worker[myidx].caller == DEF_ANON_CALLER)     // anonymous
+    int caller = G_runtime->worker[myidx].caller ;
+    if (caller == DEF_ANON_CALLER)              // anonymous caller
     {
       if (G_runtime->config.debug)
         Serial.printf("DEBUG: worker%d expiring anonymous cmd code:%d msg:%s",
@@ -341,11 +342,12 @@ void f_worker_thread(void *param)
       G_runtime->worker[myidx].state = W_IDLE ;
     }
     else
-    if (G_runtime->worker[myidx].caller < 0)    // serial console thread
+    if (caller < 0)                             // serial console thread
     {
       xTaskNotifyGive(G_runtime->sconsole_handle) ;
     }
     else                                        // notify a webclient via UDP
+    if (caller < DEF_UTHREAD_CALLER_OFFSET)
     {
       char payload = (char) G_runtime->worker[myidx].caller ;
       struct sockaddr_in dest_addr ;
@@ -355,6 +357,12 @@ void f_worker_thread(void *param)
       dest_addr.sin_port = htons(DEF_WEBSERVER_EVENT_PORT) ;
       sendto(G_runtime->notify_sd, &payload, 1, 0,
              (struct sockaddr*)&dest_addr, sizeof(dest_addr)) ;
+    }
+    else
+    if (caller >= DEF_UTHREAD_CALLER_OFFSET)    // notify a user task thread
+    {
+      caller = caller - DEF_UTHREAD_CALLER_OFFSET ;
+      xTaskNotifyGive(G_runtime->utask[caller].tid) ;
     }
   }
 }
