@@ -256,6 +256,77 @@ void f_cam_init(int idx, char *user_mhz)
 }
 
 /*
+   This is a convenience function called from "f_cam_set()". Our job is to
+   return the framesize ID number for "value" (eg, "sxga").
+*/
+
+framesize_t f_framesize_id(char *value)
+{
+  if (strcmp(value, "qqvga") == 0) return (FRAMESIZE_QQVGA) ;
+  if (strcmp(value, "qcif") == 0)  return (FRAMESIZE_QCIF) ;
+  if (strcmp(value, "hqvga") == 0) return (FRAMESIZE_HQVGA) ;
+  if (strcmp(value, "qvga") == 0)  return (FRAMESIZE_QVGA) ;
+  if (strcmp(value, "cif") == 0)   return (FRAMESIZE_CIF) ;
+  if (strcmp(value, "hvga") == 0)  return (FRAMESIZE_HVGA) ;
+  if (strcmp(value, "vga") == 0)   return (FRAMESIZE_VGA) ;
+  if (strcmp(value, "svga") == 0)  return (FRAMESIZE_SVGA) ;
+  if (strcmp(value, "xga") == 0)   return (FRAMESIZE_XGA) ;
+  if (strcmp(value, "hd") == 0)    return (FRAMESIZE_HD) ;
+  if (strcmp(value, "sxga") == 0)  return (FRAMESIZE_SXGA) ;
+  if (strcmp(value, "uxga") == 0)  return (FRAMESIZE_UXGA) ;
+  return(FRAMESIZE_SXGA) ; // default framesize
+}
+
+/*
+   This function is called from "f_cam_cmd()". Our job is to set a camera
+   parameter "key" to "value". Most of these are numeric, but some may be
+   symbolic (eg, "framesize" with a value "sxga").
+*/
+
+void f_cam_set(int idx, char *key, char *value)
+{
+  sensor_t *s = esp_camera_sensor_get() ;
+  if (s == NULL)
+  {
+    strncpy(G_runtime->worker[idx].result_msg,
+            "Failed to get camera sensor\r\n", BUF_LEN_WORKER_RESULT) ;
+    G_runtime->worker[idx].result_code = 500 ;
+    return ;
+  }
+
+  if (strcmp(key, "framesize") == 0)
+    s->set_framesize(s, f_framesize_id(value)) ;
+
+
+}
+
+/*
+   This is a convenience function called from "f_cam_show()". Our job is to
+   convert "size" into a framesize string (eg, "1280x1024 sxga"), and return
+   this as a static string.
+*/
+
+char *f_framesize_str(framesize_t size)
+{
+  switch (size)
+  {
+    case FRAMESIZE_QQVGA: return "160x120-qqvga" ;
+    case FRAMESIZE_QCIF:  return "176x144-qcif" ;
+    case FRAMESIZE_HQVGA: return "240x176-hqvga" ;
+    case FRAMESIZE_QVGA:  return "320x240-qvga" ;
+    case FRAMESIZE_CIF:   return "400x296-cif" ;
+    case FRAMESIZE_HVGA:  return "480x320-hvga" ;
+    case FRAMESIZE_VGA:   return "640x480-vga" ;
+    case FRAMESIZE_SVGA:  return "800x600-svga" ;
+    case FRAMESIZE_XGA:   return "1024x768-xga" ;
+    case FRAMESIZE_HD:    return "1280x720-hd" ;
+    case FRAMESIZE_SXGA:  return "1280x1024-sxga" ;
+    case FRAMESIZE_UXGA:  return "1600x1200-uxga" ;
+    default:              return "unknown" ;
+  }
+}
+
+/*
    This function is called from "f_cam_cmd()". Our role is to obtain the
    "sensor_t" object, from which we'll be able to examine all the various
    camera parameters.
@@ -274,7 +345,7 @@ void f_cam_show(int idx)
 
   snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
            "Image and Frame\r\n"
-           " framesize(0->20)     %d\r\n"
+           " framesize            %s\r\n"
            " scale(0|1)           %d\r\n"
            " binning(0|1)         %d\r\n"
            " quality(0->63)       %d\r\n"
@@ -284,7 +355,7 @@ void f_cam_show(int idx)
            " saturation(-2->2)    %d\r\n"
            " denoise(0|1->255)    %d\r\n"
            " special_effect(0->6) %d\r\n"
-           "Orientation and Utilities\r\n"
+           "Orientation and Misc\r\n"
            " hmirror(0|1)         %d\r\n"
            " vflip(0|1)           %d\r\n"
            " colorbar(0|1)        %d\r\n"
@@ -303,23 +374,23 @@ void f_cam_show(int idx)
            " gainceiling(0->6)    %d\r\n"
            " bpc(0|1)             %d\r\n"
            " wpc(0|1)             %d\r\n",
-           s->status.framesize,                 // Image and Frame
+           f_framesize_str(s->status.framesize),        // Image and Frame
            s->status.scale,
            s->status.binning,
            s->status.quality,
-           s->status.brightness,                // Visual Adjustments
+           s->status.brightness,                        // Visual Adjustments
            s->status.contrast,
            s->status.saturation,
            s->status.denoise,
            s->status.special_effect,
-           s->status.hmirror,                   // Orientation and Utilities
+           s->status.hmirror,                           // Orientation and Misc
            s->status.vflip,
            s->status.colorbar,
            s->status.dcw,
            s->status.lenc,
            s->status.raw_gma,
            s->status.wb_mode,
-           s->status.awb,                       // Automatic Controls
+           s->status.awb,                               // Automatic Controls
            s->status.awb_gain,
            s->status.aec,
            s->status.aec2,
@@ -361,6 +432,9 @@ void f_cam_cmd(int idx)
 
   if ((strcmp(action, "init") == 0) && (v1 != NULL))
     f_cam_init(idx, v1) ;
+  else
+  if ((strcmp(action, "set") == 0) && (v1 != NULL) && (v2 != NULL))
+    f_cam_set(idx, v1, v2) ;
   else
   if (strcmp(action, "show") == 0)
     f_cam_show(idx) ;
