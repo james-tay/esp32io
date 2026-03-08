@@ -294,10 +294,82 @@ void f_cam_set(int idx, char *key, char *value)
     return ;
   }
 
-  if (strcmp(key, "framesize") == 0)
+  if (strcmp(key, "framesize") == 0)                    // Image and Frame
     s->set_framesize(s, f_framesize_id(value)) ;
+  else
+  if (strcmp(key, "quality") == 0)
+    s->set_quality(s, atoi(value)) ;
+  else
+  if (strcmp(key, "brightness") == 0)                   // Visual Adjustments
+    s->set_brightness(s, atoi(value)) ;
+  else
+  if (strcmp(key, "contrast") == 0)
+    s->set_contrast(s, atoi(value)) ;
+  else
+  if (strcmp(key, "saturation") == 0)
+    s->set_saturation(s, atoi(value)) ;
+  else
+  if (strcmp(key, "denoise") == 0)
+    s->set_denoise(s, atoi(value)) ;
+  else
+  if (strcmp(key, "special_effect") == 0)
+    s->set_special_effect(s, atoi(value)) ;
+  else
+  if (strcmp(key, "hmirror") == 0)                      // Orientation and Misc
+    s->set_hmirror(s, atoi(value)) ;
+  else
+  if (strcmp(key, "vflip") == 0)
+    s->set_vflip(s, atoi(value)) ;
+  else
+  if (strcmp(key, "colorbar") == 0)
+    s->set_colorbar(s, atoi(value)) ;
+  else
+  if (strcmp(key, "dcw") == 0)
+    s->set_dcw(s, atoi(value)) ;
+  else
+  if (strcmp(key, "lenc") == 0)
+    s->set_lenc(s, atoi(value)) ;
+  else
+  if (strcmp(key, "raw_gma") == 0)
+    s->set_raw_gma(s, atoi(value)) ;
+  else
+  if (strcmp(key, "wb_mode") == 0)
+    s->set_wb_mode(s, atoi(value)) ;
+  else
+  if (strcmp(key, "awb_gain") == 0)                     // Automatic Controls
+    s->set_awb_gain(s, atoi(value)) ;
+  else
+  if (strcmp(key, "aec2") == 0)
+    s->set_aec2(s, atoi(value)) ;
+  else
+  if (strcmp(key, "ae_level") == 0)
+    s->set_ae_level(s, atoi(value)) ;
+  else
+  if (strcmp(key, "agc_gain") == 0)
+    s->set_agc_gain(s, atoi(value)) ;
+  else
+  if (strcmp(key, "bpc") == 0)
+    s->set_bpc(s, atoi(value)) ;
+  else
+  if (strcmp(key, "wpc") == 0)
+    s->set_wpc(s, atoi(value)) ;
+  else
+  {
+    strncpy(G_runtime->worker[idx].result_msg, "Unsupported parameter.\r\n",
+            BUF_LEN_WORKER_RESULT) ;
+    G_runtime->worker[idx].result_code = 400 ;
+    return ;
+  }
 
+  // print some feedback to the user
 
+  if (strcmp(key, "framesize") == 0)
+    snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+             "Setting %s->%d.\r\n", key, f_framesize_id(value)) ;
+  else
+    snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+             "Setting %s->%d.\r\n", key, atoi(value)) ;
+  G_runtime->worker[idx].result_code = 200 ;
 }
 
 /*
@@ -346,8 +418,8 @@ void f_cam_show(int idx)
   snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
            "Image and Frame\r\n"
            " framesize            %s\r\n"
-           " scale(0|1)           %d\r\n"
-           " binning(0|1)         %d\r\n"
+           " scale(0|1)           %d(ro)\r\n"
+           " binning(0|1)         %d(ro)\r\n"
            " quality(0->63)       %d\r\n"
            "Visual Adjustments\r\n"
            " brightness(-2->2)    %d\r\n"
@@ -364,14 +436,14 @@ void f_cam_show(int idx)
            " raw_gma(0|1)         %d\r\n"
            " wb_mode(0->4)        %d\r\n"
            "Automatic Controls\r\n"
-           " awb(0|1)             %d\r\n"
+           " awb(0|1)             %d(ro)\r\n"
            " awb_gain(0|1)        %d\r\n"
-           " aec(0|1)             %d\r\n"
+           " aec(0|1)             %d(ro)\r\n"
            " aec2(0|1)            %d\r\n"
            " ae_level(-2->2)      %d\r\n"
-           " agc(0|1)             %d\r\n"
+           " agc(0|1)             %d(ro)\r\n"
            " agc_gain(0->30)      %d\r\n"
-           " gainceiling(0->6)    %d\r\n"
+           " gainceiling(0->6)    %d(ro)\r\n"
            " bpc(0|1)             %d\r\n"
            " wpc(0|1)             %d\r\n",
            f_framesize_str(s->status.framesize),        // Image and Frame
