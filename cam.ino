@@ -256,6 +256,83 @@ void f_cam_init(int idx, char *user_mhz)
 }
 
 /*
+   This function is called from "f_cam_cmd()". Our role is to obtain the
+   "sensor_t" object, from which we'll be able to examine all the various
+   camera parameters.
+*/
+
+void f_cam_show(int idx)
+{
+  sensor_t *s = esp_camera_sensor_get() ;
+  if (s == NULL)
+  {
+    strncpy(G_runtime->worker[idx].result_msg,
+            "Failed to get camera sensor\r\n", BUF_LEN_WORKER_RESULT) ;
+    G_runtime->worker[idx].result_code = 500 ;
+    return ;
+  }
+
+  snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+           "Image and Frame\r\n"
+           " framesize(0->20)     %d\r\n"
+           " scale(0|1)           %d\r\n"
+           " binning(0|1)         %d\r\n"
+           " quality(0->63)       %d\r\n"
+           "Visual Adjustments\r\n"
+           " brightness(-2->2)    %d\r\n"
+           " contrast(-2->2)      %d\r\n"
+           " saturation(-2->2)    %d\r\n"
+           " denoise(0|1->255)    %d\r\n"
+           " special_effect(0->6) %d\r\n"
+           "Orientation and Utilities\r\n"
+           " hmirror(0|1)         %d\r\n"
+           " vflip(0|1)           %d\r\n"
+           " colorbar(0|1)        %d\r\n"
+           " dcw(0|1)             %d\r\n"
+           " lenc(0|1)            %d\r\n"
+           " raw_gma(0|1)         %d\r\n"
+           " wb_mode(0->4)        %d\r\n"
+           "Automatic Controls\r\n"
+           " awb(0|1)             %d\r\n"
+           " awb_gain(0|1)        %d\r\n"
+           " aec(0|1)             %d\r\n"
+           " aec2(0|1)            %d\r\n"
+           " ae_level(-2->2)      %d\r\n"
+           " agc(0|1)             %d\r\n"
+           " agc_gain(0->30)      %d\r\n"
+           " gainceiling(0->6)    %d\r\n"
+           " bpc(0|1)             %d\r\n"
+           " wpc(0|1)             %d\r\n",
+           s->status.framesize,                 // Image and Frame
+           s->status.scale,
+           s->status.binning,
+           s->status.quality,
+           s->status.brightness,                // Visual Adjustments
+           s->status.contrast,
+           s->status.saturation,
+           s->status.denoise,
+           s->status.special_effect,
+           s->status.hmirror,                   // Orientation and Utilities
+           s->status.vflip,
+           s->status.colorbar,
+           s->status.dcw,
+           s->status.lenc,
+           s->status.raw_gma,
+           s->status.wb_mode,
+           s->status.awb,                       // Automatic Controls
+           s->status.awb_gain,
+           s->status.aec,
+           s->status.aec2,
+           s->status.ae_level,
+           s->status.agc,
+           s->status.agc_gain,
+           s->status.gainceiling,
+           s->status.bpc,
+           s->status.wpc) ;
+  G_runtime->worker[idx].result_code = 200 ;
+}
+
+/*
    This function is called from "f_action()" when the user send a "cam ..."
    command. Recall that we are running under worker thread "idx" at this point.
 */
@@ -271,6 +348,7 @@ void f_cam_cmd(int idx)
     strncpy(G_runtime->worker[idx].result_msg,
       "init <mhz>                       XCLK frequency (8-20)\r\n"
       "set <key> <value>                set camera parameter\r\n"
+      "show                             show camera parameters\r\n"
       "reg <addr> <mask> <value>        set camera register\r\n",
       BUF_LEN_WORKER_RESULT) ;
     G_runtime->worker[idx].result_code = 400 ;
@@ -282,9 +360,10 @@ void f_cam_cmd(int idx)
   if (count > 4) v3 = tokens[4] ;       // eg, "cam reg 17 255 1"
 
   if ((strcmp(action, "init") == 0) && (v1 != NULL))
-  {
     f_cam_init(idx, v1) ;
-  }
+  else
+  if (strcmp(action, "show") == 0)
+    f_cam_show(idx) ;
   else
   {
     strncpy(G_runtime->worker[idx].result_msg, "Invalid command.\r\n",
