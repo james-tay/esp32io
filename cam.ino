@@ -34,6 +34,17 @@
        The worker thread determines the context and calls,
        - f_cam_cmd()
        - f_process_camera()
+
+   NOTES
+
+   - To "reboot" the camera, toggle pin 32 hi and the lo, eg
+       % curl http://esp32-cam/v1?cmd=hi+32
+       % curl http://esp32-cam/v1?cmd=lo+32
+
+   - To setup for long exposures, switch to register bank 1, and then set
+     the pixel clock divider value, eg
+       % curl http://esp32-cam/v1?cmd=cam+reg_set+255+255+1
+       % curl http://esp32-cam/v1?cmd=cam+reg_set+17+255+24
 */
 
 #define CAM_PIN_PWDN 32                 // set this HIGH to power off camera
@@ -476,6 +487,62 @@ void f_cam_show(int idx)
 }
 
 /*
+   This function is called from "f_cam_cmd()". Our job is to read the contents
+   of a register at "addr" but filter the result through "mask".
+*/
+
+void f_cam_reg_get(int idx, char *addr_str, char *mask_str)
+{
+  int addr = atoi(addr_str) ;
+  int mask = atoi(mask_str) ;
+
+  sensor_t *s = esp_camera_sensor_get() ;
+  if (s == NULL)
+  {
+    strncpy(G_runtime->worker[idx].result_msg,
+            "Failed to get camera sensor\r\n", BUF_LEN_WORKER_RESULT) ;
+    G_runtime->worker[idx].result_code = 500 ;
+    return ;
+  }
+
+  unsigned char result = s->get_reg(s, addr, mask) ;
+  snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+           "get_reg(0x%02x,0x%02x) returned 0x%02x.\r\n", addr, mask, result) ;
+  G_runtime->worker[idx].result_code = 200 ;
+}
+
+/*
+   This function is called from "f_cam_cmd()". Our job is to update a register
+   at "addr" by appling "mask" on "value". The "mask" allows us to ensure only
+   certain bits are manipulated (a mask of 255 means we'll update all bits).
+*/
+
+void f_cam_reg_set(int idx, char *addr_str, char *mask_str, char *value_str)
+{
+  int addr = atoi(addr_str) ;
+  int mask = atoi(mask_str) ;
+  int value = atoi(value_str) ;
+
+  sensor_t *s = esp_camera_sensor_get() ;
+  if (s == NULL)
+  {
+    strncpy(G_runtime->worker[idx].result_msg,
+            "Failed to get camera sensor\r\n", BUF_LEN_WORKER_RESULT) ;
+    G_runtime->worker[idx].result_code = 500 ;
+    return ;
+  }
+
+  int result = s->set_reg(s, addr, mask, value) ;
+  snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+           "set_reg(0x%02x,0x%02x,0x%02x) returned %d.\r\n",
+           addr, mask, value, result) ;
+  if (result == 0)
+    G_runtime->worker[idx].result_code = 200 ;
+  else
+    G_runtime->worker[idx].result_code = 500 ;
+}
+
+/*
    This function is called from "f_action()" when the user send a "cam ..."
    command. Recall that we are running under worker thread "idx" at this point.
 */
@@ -492,7 +559,8 @@ void f_cam_cmd(int idx)
       "init <mhz>                       XCLK frequency (8-20)\r\n"
       "set <key> <value>                set camera parameter\r\n"
       "show                             show camera parameters\r\n"
-      "reg <addr> <mask> <value>        set camera register\r\n",
+      "reg_get <addr> <mask>            get a camera register\r\n"
+      "reg_set <addr> <mask> <value>    set a camera register\r\n",
       BUF_LEN_WORKER_RESULT) ;
     G_runtime->worker[idx].result_code = 400 ;
     return ;
@@ -502,14 +570,20 @@ void f_cam_cmd(int idx)
   if (count > 3) v2 = tokens[3] ;       // eg, "cam set framesize sxga"
   if (count > 4) v3 = tokens[4] ;       // eg, "cam reg 17 255 1"
 
-  if ((strcmp(action, "init") == 0) && (v1 != NULL))
+  if ((strcmp(action, "init") == 0) && (v1))
     f_cam_init(idx, v1) ;
   else
-  if ((strcmp(action, "set") == 0) && (v1 != NULL) && (v2 != NULL))
+  if ((strcmp(action, "set") == 0) && (v1) && (v2))
     f_cam_set(idx, v1, v2) ;
   else
   if (strcmp(action, "show") == 0)
     f_cam_show(idx) ;
+  else
+  if ((strcmp(action, "reg_get") == 0) && (v1) && (v2))
+    f_cam_reg_get(idx, v1, v2) ;
+  else
+  if ((strcmp(action, "reg_set") == 0) && (v1) && (v2) && (v3))
+    f_cam_reg_set(idx, v1, v2, v3) ;
   else
   {
     strncpy(G_runtime->worker[idx].result_msg, "Invalid command.\r\n",
