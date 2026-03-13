@@ -44,7 +44,16 @@
    - To setup for long exposures, switch to register bank 1, and then set
      the pixel clock divider value, eg
        % curl http://esp32-cam/v1?cmd=cam+reg_set+255+255+1
-       % curl http://esp32-cam/v1?cmd=cam+reg_set+17+255+24
+       % curl http://esp32-cam/v1?cmd=cam+reg_set+17+255+8
+
+   - To query camera model, select sensor bank registers then query for the
+     PID and VER registers, eg
+       % curl http://esp32-cam/v1?cmd=cam+reg_set+255+255+1
+       % curl http://esp32-cam/v1?cmd=cam+reg_get+10+255        # PID
+       % curl http://esp32-cam/v1?cmd=cam+reg_get+11+255        # VER
+     thus,
+       OV2640 - PID=0x26, VER=0x42
+
 */
 
 #define CAM_PIN_PWDN 32                 // set this HIGH to power off camera

@@ -208,6 +208,8 @@ void f_handle_core_metrics(int idx)
   strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
   snprintf(s, l, "ec_wifi_rssi %d\n", WiFi.RSSI()) ;
   strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
+  snprintf(s, l, "ec_user_tasks_running %d\n", f_task_running()) ;
+  strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
 
   // serial port metrics
 

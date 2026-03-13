@@ -85,6 +85,20 @@
 */
 
 /*
+   This function is called from "f_handle_core_metrics()". Our job is to
+   return the number of user task threads in the UTHREAD_RUNNING state.
+*/
+
+int f_task_running()
+{
+  int total = 0 ;
+  for (int slot=0 ; slot < DEF_MAX_USER_THREADS ; slot++)
+    if (G_runtime->utask[slot].state == UTHREAD_RUNNING)
+      total++ ;
+  return(total) ;
+}
+
+/*
    This function is called from "f_task_cmd()". Our job is to print out some
    help references for all supported user task thread functions.
 */

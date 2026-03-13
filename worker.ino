@@ -166,7 +166,7 @@ void f_uptime_cmd(int idx)
   if ((G_runtime->ntp_updates > 0) && (getLocalTime(&timeinfo)))
   {
     gettimeofday(&tv, NULL) ;
-    snprintf(line, BUF_LEN_LINE-1, "%04d%02d%02d-%02d%02d.%03d UTC",
+    snprintf(line, BUF_LEN_LINE-1, "%04d%02d%02d-%02d%02d%02d UTC",
              timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
              timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
              tv.tv_usec / 1000) ;
