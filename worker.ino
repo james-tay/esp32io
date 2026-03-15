@@ -226,6 +226,7 @@ void f_action(int idx)
   {
     strncpy(G_runtime->worker[idx].result_msg,
       "cam ...          camera management\r\n"
+      "dht22 <pin>      poll temperature and humidity\r\n"
       "fs ...           filesystem management\r\n"
       "hi <pin> [usec]  set a pin high or pulse it high\r\n"
       "ps               threads cpu time consumed\r\n"
@@ -247,6 +248,9 @@ void f_action(int idx)
   else
   if (strcmp(keyword, "cam") == 0)                              // cam
     f_cam_cmd(idx) ;
+  else
+  if (strcmp(keyword, "dht22") == 0)                            // dht22
+    f_dht22_cmd(idx) ;
   else
   if (strcmp(keyword, "hi") == 0)                               // hi
     f_hi_lo_cmd(idx) ;

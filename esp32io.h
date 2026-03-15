@@ -74,6 +74,7 @@
 #define BUF_LEN_WIFI_SSID 32            // maximum wifi SSID allowed length
 #define BUF_LEN_WIFI_PW 64              // maximum wifi password allowed
 #define BUF_LEN_LINE 128                // generic metrics, http response, etc
+#define BUF_LEN_ERR 96                  // generic error message buffer
 #define BUF_LEN_UTHREAD_STATUS 80       // optional user thread status message
 #define BUF_LEN_UTASK_FILESIZE 1024     // max size of user task files
 

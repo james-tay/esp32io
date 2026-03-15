@@ -112,6 +112,7 @@ void f_task_help(int idx)
           "/<name>.labels       set metric name and labels (optional)\r\n"
           "\r\n"
           "[User Task Threads - Config Refrence]\r\n"
+          "ft_dht22:<c>,<dataPin>,<pwrPin>,<intervalSecs>\r\n"
           "ft_utasks:<c>,<filename>\r\n"
           "ft_wg:<c>,<startupSecs>,<intervalSecs>,<noActivitySecs>\r\n",
           BUF_LEN_WORKER_RESULT) ;
@@ -199,8 +200,12 @@ void f_user_thread_lifecycle(void *param)
 
 int f_set_ft_addr(int slot, char *ft_name)
 {
+  if (strcmp(ft_name, "ft_dht22") == 0)
+    G_runtime->utask[slot].ft_addr = ft_dht22 ;
+  else
   if (strcmp(ft_name, "ft_utasks") == 0)
     G_runtime->utask[slot].ft_addr = ft_utasks ;
+  else
   if (strcmp(ft_name, "ft_wd") == 0)
     G_runtime->utask[slot].ft_addr = ft_wd ;
 
