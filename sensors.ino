@@ -118,7 +118,7 @@ void ft_dht22(S_UserThread *self)
 
   static thread_local long long ts_next_run=0 ;
 
-  if (self->num_args != 3)
+  if (self->num_args != 3)      // don't run if we're called with bad arguments
   {
     strncpy(self->status, "Incorrect arguments", BUF_LEN_UTHREAD_STATUS) ;
     self->state = UTHREAD_STOPPED ;
@@ -140,7 +140,7 @@ void ft_dht22(S_UserThread *self)
     self->result[2].result_type = UTHREAD_RESULT_INT ;          // abnormal
     self->result[2].l_name[0] = "readings" ;
     self->result[2].l_data[0] = "abnormal" ;
-    ts_next_run = esp_timer_get_time() + (intervalSecs * 1000000) ;
+    ts_next_run = esp_timer_get_time() ;
   }
 
   // if user defined the power pin, boot up the DHT22 now
@@ -184,7 +184,6 @@ void ft_dht22(S_UserThread *self)
       {
         prev_temp = cur_temp ;
         prev_humidity = cur_humidity ;
-        err[0] = 0 ;
         delay(DHT22_POLL_DELAY_MS) ;
         if ((f_sensor_dht22(dataPin, &cur_temp, &cur_humidity, err)) &&
             (prev_temp - cur_temp < DHT22_MAX_T_DELTA) &&
@@ -208,24 +207,36 @@ void ft_dht22(S_UserThread *self)
       if ((G_runtime->config.debug) && (strlen(err) > 0))
         Serial.printf("DEBUG: ft_dht22() err:%s\r\n", err) ;
     }
-
     retries-- ;
   }
 
   if (pwrPin >= 0)
     digitalWrite(pwrPin, LOW) ;
 
-  // if "err" is present then don't expose metrics because they're now stale
+  // update thread's status, then sit here until it's time to run again
 
   long long ts_end = esp_timer_get_time() ;
-  if (strlen(err) > 0)
-    snprintf(self->status, BUF_LEN_UTHREAD_STATUS, "%s", err) ;
-  else
-    snprintf(self->status, BUF_LEN_UTHREAD_STATUS, "polled in %lldms",
-             (ts_end - ts_start) / 1000) ;
+  ts_next_run = ts_next_run + (intervalSecs * 1000000) ;
+  long long nap_ms = (ts_next_run - ts_end) / 1000 ;
 
-  // sit here until it's time to run again
+  if (strlen(err) > 0)          // something went wrong, don't expose results
+  {
+    snprintf(self->status, BUF_LEN_UTHREAD_STATUS, "%s, retry in %lld ms",
+             err, nap_ms) ;
+    self->result[0].result_type = UTHREAD_RESULT_NONE ;
+    self->result[1].result_type = UTHREAD_RESULT_NONE ;
+    self->result[2].result_type = UTHREAD_RESULT_NONE ;
+  }
+  else                          // data is good, expose our results
+  {
+    snprintf(self->status, BUF_LEN_UTHREAD_STATUS,
+             "polled in %lldms, nap %lld ms",
+             (ts_end - ts_start) / 1000, nap_ms) ;
+    self->result[0].result_type = UTHREAD_RESULT_FLOAT ;
+    self->result[1].result_type = UTHREAD_RESULT_FLOAT ;
+    self->result[2].result_type = UTHREAD_RESULT_INT ;
+  }
 
-
+  delay(nap_ms) ;               // pause until it's time to be called again
 }
 
