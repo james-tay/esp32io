@@ -7,6 +7,10 @@
 #   Versions
 #     - Arduino CLI version 1.2.2
 #     - Core esp32:esp32 version 3.3.6
+#   Libraries
+#     - OneWire version 2.3.8
+#       (see https://www.pjrc.com/teensy/td_libs_OneWire.html)
+#       $ arduino-cli lib install OneWire@2.3.8
 #
 # USAGE
 #

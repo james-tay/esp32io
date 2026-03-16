@@ -1,3 +1,12 @@
+#define DHT22_TIMEOUT_USEC 500          // expected pulseIn response time
+#define DHT22_MAX_T_DELTA 5.0           // max temperature swing between polls
+#define DHT22_MAX_H_DELTA 20            // max humidity swing between polls
+#define DHT22_MAX_RETRIES 10            // max total polls
+#define DHT22_POWER_ON_DELAY_MS 1200    // based on datasheet section 6
+#define DHT22_POLL_DELAY_MS 2200        // based on datasheet section 7
+
+#define DS18B20_MAX_PER_BUS 8           // max devices per GPIO pin
+
 /*
    This function polls a DHT22 at "pin". If successful, the "temperature" and
    "humidity" values are written and this function returns 1, otherwise 0 if
@@ -7,8 +16,6 @@
 
 int f_sensor_dht22(int dataPin, float *temperature, float *humidity, char *err)
 {
-  #define DHT22_TIMEOUT_USEC 500
-
   int cycles[40] ;
   unsigned char data[5] ;
 
@@ -110,12 +117,6 @@ void f_dht22_cmd(int idx)
 
 void ft_dht22(S_UserThread *self)
 {
-  #define DHT22_MAX_T_DELTA 5.0         // max temperature swing between polls
-  #define DHT22_MAX_H_DELTA 20          // max humidity swing between polls
-  #define DHT22_MAX_RETRIES 10          // max total polls
-  #define DHT22_POWER_ON_DELAY_MS 1200  // based on datasheet section 6
-  #define DHT22_POLL_DELAY_MS 2200      // based on datasheet section 7
-
   static thread_local long long ts_next_run=0 ;
 
   if (self->num_args != 3)      // don't run if we're called with bad arguments
@@ -238,5 +239,47 @@ void ft_dht22(S_UserThread *self)
   }
 
   delay(nap_ms) ;               // pause until it's time to be called again
+}
+
+/*
+   This function searches "pin" for DS18B20 devices. A total of "max_devices"
+   will be searched, their readings will be written into the "t_values" array
+   and their OneWire addresses written into the "addresses" array. The actual
+   number of devices discovered is returned.
+*/
+
+int f_sensor_ds18b20(int pin, float *t_values, char *addrs, int max_devices,
+                     char *err)
+{
+
+
+
+}
+
+
+/*
+   This function is called from "f_action()", our job is to obtain readings
+   from one or more DS18B20 sensors on a certain GPIO pin by calling the
+   "f_sensor_ds18b20()" function, and then packaging the response.
+*/
+
+void f_ds18b20_cmd(int idx)
+{
+  char *tokens[2], err[BUF_LEN_ERR], addrs[DS18B20_MAX_PER_BUS * 8] ;
+  float temperatures[DS18B20_MAX_PER_BUS] ;
+
+  if (f_parse(G_runtime->worker[idx].cmd, tokens, 2) != 2)
+  {
+    strncpy(G_runtime->worker[idx].result_msg, "Invalid usage.\r\n",
+            BUF_LEN_WORKER_RESULT) ;
+    G_runtime->worker[idx].result_code = 400 ;
+    return ;
+  }
+  err[0] = 0 ;
+
+  f_sensor_ds18b20(atoi(tokens[1]), temperatures, addrs,
+                   DS18B20_MAX_PER_BUS, err) ;
+
+
 }
 
