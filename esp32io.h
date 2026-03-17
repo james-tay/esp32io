@@ -4,6 +4,10 @@
 #include <SPIFFS.h>
 #include <Update.h>
 
+// third party libraries
+
+#include <OneWire.h>
+
 // esp-idf - https://github.com/espressif/esp-idf/tree/master/components
 
 #include "netdb.h"
