@@ -249,7 +249,7 @@ void ft_dht22(S_UserThread *self)
 */
 
 int f_sensor_ds18b20(int pin, float *t_values, unsigned char *addrs,
-                     int max_devices, char *err)
+                     int max_devices)
 {
   int count=0 ;
   unsigned char dev[8], data[9], *addr_ptr = addrs ;
@@ -272,11 +272,11 @@ int f_sensor_ds18b20(int pin, float *t_values, unsigned char *addrs,
     memcpy(dev, addr_ptr, 8) ;
     addr_ptr = addr_ptr + 8 ;
 
-    bus.reset() ;
+    bus.reset() ;               // a reset "wakes" each device on the bus
     bus.select(dev) ;
     bus.write(0x44) ;           // start temperature conversion to scratch pad
     delay(750) ;
-    bus.reset() ;
+    bus.reset() ;               // must perform a reset before next command
     bus.select(dev) ;
     bus.write(0xBE) ;           // read scratch pad
     for (int i=0 ; i < 9 ; i++)
@@ -286,14 +286,9 @@ int f_sensor_ds18b20(int pin, float *t_values, unsigned char *addrs,
 
     unsigned short raw = (data[1] << 8) | data[0] ;
     t_values[idx] = (float) raw / 16.0 ;
-
-    if (G_runtime->config.debug)
-      Serial.printf("DEBUG: f_sensor_ds18b20() device:%d "
-                    "%02x%02x%02x%02x%02x%02x%02x%02x -> %f\r\n", idx,
-                    dev[0], dev[1], dev[2], dev[3],
-                    dev[4], dev[5], dev[6], dev[7], t_values[idx]) ;
-
   }
+  if (G_runtime->config.debug)
+    Serial.printf("DEBUG: f_sensor_ds18b20() found %d devices.\r\n", count) ;
   return(count) ;
 }
 
@@ -305,8 +300,8 @@ int f_sensor_ds18b20(int pin, float *t_values, unsigned char *addrs,
 
 void f_ds18b20_cmd(int idx)
 {
-  char *tokens[2], err[BUF_LEN_ERR] ;
-  unsigned char addrs[DS18B20_MAX_PER_BUS * 17] ; // 8x hex bytes + a \00
+  char *tokens[2], buf[BUF_LEN_LINE], dev[8] ;
+  unsigned char addrs[DS18B20_MAX_PER_BUS * 8] ; // 8x hex bytes per device
   float temperatures[DS18B20_MAX_PER_BUS] ;
 
   if (f_parse(G_runtime->worker[idx].cmd, tokens, 2) != 2)
@@ -316,14 +311,24 @@ void f_ds18b20_cmd(int idx)
     G_runtime->worker[idx].result_code = 400 ;
     return ;
   }
-  err[0] = 0 ;
   memset(addrs, 0, DS18B20_MAX_PER_BUS * 17) ;
 
   int total = f_sensor_ds18b20(atoi(tokens[1]), temperatures, addrs,
-                               DS18B20_MAX_PER_BUS, err) ;
+                               DS18B20_MAX_PER_BUS) ;
 
-
-
-
+  int remainder = BUF_LEN_WORKER_RESULT ;
+  for (int i=0 ; i < total ; i++)
+  {
+    memcpy(dev, addrs + (i*8), 8) ;
+    snprintf(buf, BUF_LEN_LINE, "%02x%02x%02x%02x%02x%02x%02x%02x -> %fC\r\n",
+             dev[0], dev[1], dev[2], dev[3], dev[4], dev[5], dev[6], dev[7],
+             temperatures[i]) ;
+    strncat(G_runtime->worker[idx].result_msg, buf, remainder) ;
+    remainder = remainder - strlen(buf) - 1 ;
+  }
+  if (total > 0)
+    G_runtime->worker[idx].result_code = 200 ;
+  else
+    G_runtime->worker[idx].result_code = 500 ;
 }
 
