@@ -6,6 +6,8 @@
 #define DHT22_POLL_DELAY_MS 2200        // based on datasheet section 7
 
 #define DS18B20_MAX_PER_BUS 8           // max devices per GPIO pin
+#define DS18B20_POLL_DELAY 800          // based on datasheet page 1
+#define DS18B20_POWER_ON_DELAY_MS 20    // wait for voltage to stabilize
 
 /*
    This function polls a DHT22 at "pin". If successful, the "temperature" and
@@ -242,14 +244,13 @@ void ft_dht22(S_UserThread *self)
 }
 
 /*
-   This function searches "pin" for DS18B20 devices. A total of "max_devices"
-   will be searched, their readings will be written into the "t_values" array
+   This function searches "pin" for DS18B20 devices, up to DS18B20_MAX_PER_BUS
+   will be searched. Their readings will be written into the "t_values" array
    and their OneWire addresses written into the "addresses" array. The actual
    number of devices discovered is returned.
 */
 
-int f_sensor_ds18b20(int pin, float *t_values, unsigned char *addrs,
-                     int max_devices)
+int f_sensor_ds18b20(int pin, float *t_values, unsigned char *addrs)
 {
   int count=0 ;
   unsigned char dev[8], data[9], *addr_ptr = addrs ;
@@ -258,7 +259,7 @@ int f_sensor_ds18b20(int pin, float *t_values, unsigned char *addrs,
   bus.reset() ;
   bus.reset_search() ;
 
-  while ((bus.search(dev)) && (count < max_devices))
+  while ((bus.search(dev)) && (count < DS18B20_MAX_PER_BUS))
     if (dev[0] == 0x28) // DS18B20 units have 0x28 as their first addr byte
     {
       memcpy(addr_ptr, dev, 8) ;
@@ -275,7 +276,7 @@ int f_sensor_ds18b20(int pin, float *t_values, unsigned char *addrs,
     bus.reset() ;               // a reset "wakes" each device on the bus
     bus.select(dev) ;
     bus.write(0x44) ;           // start temperature conversion to scratch pad
-    delay(750) ;
+    delay(DS18B20_POLL_DELAY) ;
     bus.reset() ;               // must perform a reset before next command
     bus.select(dev) ;
     bus.write(0xBE) ;           // read scratch pad
@@ -312,10 +313,7 @@ void f_ds18b20_cmd(int idx)
     return ;
   }
   memset(addrs, 0, DS18B20_MAX_PER_BUS * 17) ;
-
-  int total = f_sensor_ds18b20(atoi(tokens[1]), temperatures, addrs,
-                               DS18B20_MAX_PER_BUS) ;
-
+  int total = f_sensor_ds18b20(atoi(tokens[1]), temperatures, addrs) ;
   int remainder = BUF_LEN_WORKER_RESULT ;
   for (int i=0 ; i < total ; i++)
   {
@@ -330,5 +328,46 @@ void f_ds18b20_cmd(int idx)
     G_runtime->worker[idx].result_code = 200 ;
   else
     G_runtime->worker[idx].result_code = 500 ;
+}
+
+/*
+   This function is called from "f_user_thread_lifecycle()". We are supplied
+   with the data pin and power pin arguments. Our job is to manage power and
+   call "f_sensor_ds18b20()" to perform the actual work.
+*/
+
+void ft_ds18b20(S_UserThread *self)
+{
+  static thread_local long long ts_next_run=0 ;
+
+  if (self->num_args != 3)      // don't run if we're called with bad arguments
+  {
+    strncpy(self->status, "Incorrect arguments", BUF_LEN_UTHREAD_STATUS) ;
+    self->state = UTHREAD_STOPPED ;
+    return ;
+  }
+  int dataPin = atoi(self->in_args[0]) ;
+  int pwrPin = atoi(self->in_args[1]) ;
+  int intervalSecs = atoi(self->in_args[2]) ;
+
+  float temperatures[DS18B20_MAX_PER_BUS] ;
+  unsigned char addrs[DS18B20_MAX_PER_BUS * 8] ; // 8x hex bytes per device
+
+  if (pwrPin >= 0)
+  {
+    pinMode(pwrPin, OUTPUT) ;
+    digitalWrite(pwrPin, HIGH) ;
+    delay(DS18B20_POWER_ON_DELAY_MS) ;
+  }
+
+
+  int total = f_sensor_ds18b20(dataPin, temperatures, addrs) ;
+
+
+  if (pwrPin >= 0)
+    digitalWrite(pwrPin, LOW) ;
+
+
+  delay (1000) ;
 }
 
