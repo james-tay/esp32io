@@ -373,6 +373,7 @@ void setup()
   memset(G_runtime, 0, sizeof(S_RuntimeData)) ;
   G_runtime->L_worker = xSemaphoreCreateMutex() ;
   G_runtime->L_uthread = xSemaphoreCreateMutex() ;
+  G_runtime->L_uart = xSemaphoreCreateMutex() ;
   G_runtime->L_serial_in = xSemaphoreCreateBinary() ;
   G_runtime->config.wifi_check_secs = DEF_WIFI_CHK_INT_SECS ;
   G_runtime->config.init_delay_secs = DEF_INIT_THREAD_START_SECS ;

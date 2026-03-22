@@ -114,6 +114,7 @@ void f_task_help(int idx)
           "[User Task Threads - Config Refrence]\r\n"
           "ft_dht22:<c>,<dataPin>,<pwrPin>,<intervalSecs>\r\n"
           "ft_ds18b20:<c>,<dataPin>,<pwrPin>,<intervalSecs>\r\n"
+          "ft_serial:<c>,<tcpPort>,<baud>,<rxPin>,<txPin>\r\n"
           "ft_utasks:<c>,<filename>\r\n"
           "ft_wg:<c>,<startupSecs>,<intervalSecs>,<noActivitySecs>\r\n",
           BUF_LEN_WORKER_RESULT) ;
@@ -206,6 +207,9 @@ int f_set_ft_addr(int slot, char *ft_name)
   else
   if (strcmp(ft_name, "ft_ds18b20") == 0)
     G_runtime->utask[slot].ft_addr = ft_ds18b20 ;
+  else
+  if (strcmp(ft_name, "ft_serial") == 0)
+    G_runtime->utask[slot].ft_addr = ft_serial ;
   else
   if (strcmp(ft_name, "ft_utasks") == 0)
     G_runtime->utask[slot].ft_addr = ft_utasks ;
