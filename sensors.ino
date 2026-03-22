@@ -240,7 +240,8 @@ void ft_dht22(S_UserThread *self)
     self->result[2].result_type = UTHREAD_RESULT_INT ;
   }
 
-  delay(nap_ms) ;               // pause until it's time to be called again
+  if (nap_ms > 0)
+    delay(nap_ms) ;             // pause until it's time to be called again
 }
 
 /*
@@ -346,12 +347,30 @@ void ft_ds18b20(S_UserThread *self)
     self->state = UTHREAD_STOPPED ;
     return ;
   }
+  long long ts_start = esp_timer_get_time() ;
+
   int dataPin = atoi(self->in_args[0]) ;
   int pwrPin = atoi(self->in_args[1]) ;
   int intervalSecs = atoi(self->in_args[2]) ;
 
+  if (self->loop == 0)
+  {
+    self->state = UTHREAD_RUNNING ;
+    ts_next_run = esp_timer_get_time() ;
+  }
+
   float temperatures[DS18B20_MAX_PER_BUS] ;
   unsigned char addrs[DS18B20_MAX_PER_BUS * 8] ; // 8x hex bytes per device
+
+  // "addr_buf[]" holds the (hex) string representation for addresses of all
+  // possible sensors. This space is used to populate "l_data" in each of the
+  // results we'll expose. Thus, the "addr_buf[]" has the format,
+  //   [<1st_dev_16chars>0x00][<2nd_dev_16chars>0x00]...
+
+  int addr_size = (16 + 1) * DS18B20_MAX_PER_BUS ;
+  char addr_buf[addr_size], *addr_ptr=addr_buf ;
+  unsigned char dev[8] ;
+  memset(addr_buf, 0, addr_size) ;
 
   if (pwrPin >= 0)
   {
@@ -360,14 +379,38 @@ void ft_ds18b20(S_UserThread *self)
     delay(DS18B20_POWER_ON_DELAY_MS) ;
   }
 
+  // poll the one-wire bus, then expose whatever devices we found
 
   int total = f_sensor_ds18b20(dataPin, temperatures, addrs) ;
+  for (int i=0 ; i < total ; i++)
+  {
+    addr_ptr = addr_buf + (i*16) + i ; // point to location within "addr_buf"
+    memcpy(dev, addrs + (i*8), 8) ;
+    sprintf(addr_ptr, "%02x%02x%02x%02x%02x%02x%02x%02x",
+            dev[0], dev[1], dev[2], dev[3], dev[4], dev[5], dev[6], dev[7]) ;
+    self->result[i].l_name[0] = "address" ;
+    self->result[i].l_data[0] = addr_ptr ;
+    self->result[i].f_value = temperatures[i] ;
+    self->result[i].result_type = UTHREAD_RESULT_FLOAT ;
+  }
 
+  // if somehow we have fewer devices this time, don't expose stale metrics
+
+  for (int i=total ; i < DEF_MAX_THREAD_RESULTS ; i++)
+    self->result[i].result_type = UTHREAD_RESULT_NONE ;
+
+  // power down the device(s) and then figure out how long to nap for
 
   if (pwrPin >= 0)
     digitalWrite(pwrPin, LOW) ;
 
-
-  delay (1000) ;
+  long long ts_end = esp_timer_get_time() ;
+  ts_next_run = ts_next_run + (intervalSecs * 1000000) ;
+  long long nap_ms = (ts_next_run - ts_end) / 1000 ;
+  snprintf(self->status, BUF_LEN_UTHREAD_STATUS,
+           "polled %d devices in %lldms, nap %lld ms",
+           total, (ts_end - ts_start) / 1000, nap_ms) ;
+  if (nap_ms > 0)
+    delay (nap_ms) ;
 }
 
