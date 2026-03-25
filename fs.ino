@@ -71,7 +71,7 @@ void f_fs_ls(int idx)
     snprintf (line, BUF_LEN_LINE, "%-8d /%s\r\n", f.size(), f.name()) ;
     strncat(G_runtime->worker[idx].result_msg, line,
             BUF_LEN_WORKER_RESULT -
-            strlen(G_runtime->worker[idx].result_msg)) ;
+            strlen(G_runtime->worker[idx].result_msg) - 1) ;
     f = root.openNextFile () ;
   }
   root.close () ;
@@ -123,7 +123,7 @@ void f_fs_partinfo(int idx)
              (unsigned long) p->size / 1024) ;
     strncat(G_runtime->worker[idx].result_msg, line,
             BUF_LEN_WORKER_RESULT -
-            strlen(G_runtime->worker[idx].result_msg)) ;
+            strlen(G_runtime->worker[idx].result_msg) - 1) ;
     p_iter = esp_partition_next(p_iter) ;
   }
   esp_partition_iterator_release(p_iter) ;

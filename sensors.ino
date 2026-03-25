@@ -315,15 +315,15 @@ void f_ds18b20_cmd(int idx)
   }
   memset(addrs, 0, DS18B20_MAX_PER_BUS * 17) ;
   int total = f_sensor_ds18b20(atoi(tokens[1]), temperatures, addrs) ;
-  int remainder = BUF_LEN_WORKER_RESULT ;
   for (int i=0 ; i < total ; i++)
   {
     memcpy(dev, addrs + (i*8), 8) ;
     snprintf(buf, BUF_LEN_LINE, "%02x%02x%02x%02x%02x%02x%02x%02x -> %fC\r\n",
              dev[0], dev[1], dev[2], dev[3], dev[4], dev[5], dev[6], dev[7],
              temperatures[i]) ;
-    strncat(G_runtime->worker[idx].result_msg, buf, remainder) ;
-    remainder = remainder - strlen(buf) - 1 ;
+    strncat(G_runtime->worker[idx].result_msg, buf,
+            BUF_LEN_WORKER_RESULT -
+            strlen(G_runtime->worker[idx].result_msg) - 1) ;
   }
   if (total > 0)
     G_runtime->worker[idx].result_code = 200 ;

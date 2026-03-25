@@ -244,7 +244,7 @@ void f_wifi_cmd(int idx)
                WiFi.BSSIDstr(i).c_str()) ;
       strncat(G_runtime->worker[idx].result_msg, line,
               BUF_LEN_WORKER_RESULT -
-              strlen(G_runtime->worker[idx].result_msg)) ;
+              strlen(G_runtime->worker[idx].result_msg) - 1) ;
     }
   }
   else

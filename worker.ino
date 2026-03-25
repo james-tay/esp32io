@@ -140,13 +140,13 @@ void f_ps_cmd(int idx)
       case eInvalid:   state = "inval" ; break ;
     }
     int remainder = BUF_LEN_WORKER_RESULT -
-                    strlen(G_runtime->worker[idx].result_msg) ;
+                    strlen(G_runtime->worker[idx].result_msg) - 1 ;
     snprintf(s, BUF_LEN_LINE, "%-16s %5s %3d %6d %10lu\r\n",
              task_array[n].pcTaskName, state,
              task_array[n].uxCurrentPriority,
              task_array[n].usStackHighWaterMark,
              task_array[n].ulRunTimeCounter) ;
-    strncat(G_runtime->worker[idx].result_msg, s, remainder-1) ;
+    strncat(G_runtime->worker[idx].result_msg, s, remainder) ;
   }
   G_runtime->worker[idx].result_code = 200 ;
 }

@@ -1,4 +1,58 @@
 /*
+   This function is called from "ft_serial()" when we're ready to interface
+   an (incoming) TCP client with a UART. Our job is to focus on the main loop
+   for the lifecycle of the serial/TCP service. While we're able to use
+   "select()" on the TCP socket(s), we don't have a similiar facility for
+   polling incoming serial bytes. For this reason, we perform short waits in
+   "select()" and then check if serial bytes are available.
+*/
+
+void f_handle_serial(S_UserThread *self, int listen_sd)
+{
+  #define FT_SERIAL_POLL_MSEC 30
+
+  int num_fds, result, client_sd=-1 ;
+  char iobuf[BUF_LEN_LINE] ;
+  fd_set rfds ;
+  struct timeval tv ;
+
+  while(self->state == UTHREAD_RUNNING)
+  {
+    tv.tv_sec = 0 ;
+    tv.tv_usec = FT_SERIAL_POLL_MSEC ;
+    FD_ZERO(&rfds) ;
+    FD_SET(listen_sd, &rfds) ;          // always monitor "listen_sd"
+    num_fds = listen_sd + 1 ;
+    if (client_sd >= 0)                 // monitor "client_sd" if connected
+    {
+      FD_SET(client_sd, &rfds) ;
+      if (client_sd > listen_sd)
+        num_fds = client_sd + 1 ;
+    }
+
+    result = select(num_fds, &rfds, NULL, NULL, &tv) ;
+    if (result)
+    {
+      if (FD_ISSET(listen_sd, &rfds))   // incoming TCP Client
+      {
+        int new_sd = accept(listen_sd, NULL, NULL) ;
+        if (client_sd >= 0)
+          close(new_sd) ;               // already have a connected client
+        else
+          client_sd = new_sd ;          // really accept new client
+      }
+
+
+    }
+
+    // now check if data arrived on the serial port
+
+
+
+  }
+}
+
+/*
    This function is called from "f_user_thread_lifecycle()". Our job is to
    setup a listening TCP socket and then pass a TCP client's IO to a pair of
    pins configured for TTL serial IO (bidirectional). This function does not
@@ -72,15 +126,15 @@ void ft_serial(S_UserThread *self)
     return ;
   }
 
+  // Initialize the serial port and then hand work over to "f_handle_serial()"
 
+  self->state = UTHREAD_RUNNING ;
+  Serial2.begin(baud, SERIAL_8N1, rx_pin, tx_pin) ;
+  f_handle_serial(self, listen_sd) ;
 
+  // release resources associated with the UART before releasing the lock
 
-  // in our main loop, make sure we never block for more than half of
-  // DEF_MAX_THREAD_WRAPUP_MSEC, so that we can perform an orderly exit
-
-
-
-
+  Serial2.end() ;
   xSemaphoreGive(G_runtime->L_uart) ;
   close(listen_sd) ;
 }

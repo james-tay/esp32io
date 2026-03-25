@@ -159,7 +159,7 @@ void f_task_list(int idx)
                s_state, age_secs,
                G_runtime->utask[slot].loop, G_runtime->utask[slot].status) ;
       remainder = BUF_LEN_WORKER_RESULT -
-                    strlen(G_runtime->worker[idx].result_msg) ;
+                    strlen(G_runtime->worker[idx].result_msg) - 1 ;
       strncat(G_runtime->worker[idx].result_msg, line, remainder) ;
     }
   G_runtime->worker[idx].result_code = 200 ;
