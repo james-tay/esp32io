@@ -109,7 +109,7 @@ void f_hi_lo_cmd(int idx)
 
 void f_ps_cmd(int idx)
 {
-  #define MAX_TASK_THREADS 20 // the maximum number of thread we'd handle
+  #define MAX_TASK_THREADS 30 // the maximum number of thread we'd handle
   char s[BUF_LEN_LINE] ;
 
   // print header and then see how many threads are currently present
@@ -121,7 +121,12 @@ void f_ps_cmd(int idx)
 
   UBaseType_t num_tasks = uxTaskGetNumberOfTasks() ;
   if (num_tasks > MAX_TASK_THREADS) // we'll use stack memory, limit array size
-    num_tasks = MAX_TASK_THREADS ;
+  {
+    snprintf(s, BUF_LEN_WORKER_RESULT, "Too many tasks, %d (max %d)\r\n",
+             num_tasks, MAX_TASK_THREADS) ;
+    G_runtime->worker[idx].result_code = 500 ;
+    return ;
+  }
   TaskStatus_t task_array[num_tasks] ;
   num_tasks = uxTaskGetSystemState(task_array, num_tasks, NULL) ;
 

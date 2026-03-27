@@ -14,8 +14,10 @@
 #include "esp_sntp.h"
 #include "esp_flash.h"
 #include "esp_camera.h"
+#include "esp_vfs_dev.h"
 #include "esp_chip_info.h"
 #include "esp_netif_sntp.h"
+#include "driver/uart.h"
 
 // general defines
 
@@ -74,7 +76,7 @@
 #define BUF_LEN_WEB_URL 256             // maximum allowed URL length
 #define BUF_LEN_METRICS 2048            // buffer for "/metrics" response
 #define BUF_LEN_WORKER_NAME 12          // how long worker thread name is
-#define BUF_LEN_WORKER_RESULT 1024      // worker thread's "result_msg" buffer
+#define BUF_LEN_WORKER_RESULT 1280      // worker thread's "result_msg" buffer
 #define BUF_LEN_WIFI_SSID 32            // maximum wifi SSID allowed length
 #define BUF_LEN_WIFI_PW 64              // maximum wifi password allowed
 #define BUF_LEN_LINE 128                // generic metrics, http response, etc

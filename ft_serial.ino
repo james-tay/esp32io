@@ -1,25 +1,24 @@
 /*
    This function is called from "ft_serial()" when we're ready to interface
    an (incoming) TCP client with a UART. Our job is to focus on the main loop
-   for the lifecycle of the serial/TCP service. While we're able to use
-   "select()" on the TCP socket(s), we don't have a similiar facility for
-   polling incoming serial bytes. For this reason, we perform short waits in
-   "select()" and then check if serial bytes are available.
+   for the lifecycle of the serial/TCP service. We want to use "select()" to
+   multiplex between "listen_sd", "client_sd" and the UART
 */
 
-void f_handle_serial(S_UserThread *self, int listen_sd)
+void f_serial_io(S_UserThread *self, int listen_sd)
 {
-  #define FT_SERIAL_POLL_MSEC 30
-
   int num_fds, result, client_sd=-1 ;
+  long long loops=0 ;
   char iobuf[BUF_LEN_LINE] ;
   fd_set rfds ;
   struct timeval tv ;
 
+  // use short "select()" cycles, be ready for a quick exit in the main loop
+
   while(self->state == UTHREAD_RUNNING)
   {
     tv.tv_sec = 0 ;
-    tv.tv_usec = FT_SERIAL_POLL_MSEC ;
+    tv.tv_usec = DEF_MAX_THREAD_WRAPUP_MSEC * 1000 / 4 ;
     FD_ZERO(&rfds) ;
     FD_SET(listen_sd, &rfds) ;          // always monitor "listen_sd"
     num_fds = listen_sd + 1 ;
@@ -49,6 +48,9 @@ void f_handle_serial(S_UserThread *self, int listen_sd)
 
 
 
+    loops++ ;
+    snprintf(self->status, BUF_LEN_UTHREAD_STATUS, "busy:%d loops:%lld",
+             result, loops) ;
   }
 }
 
@@ -66,11 +68,9 @@ void f_handle_serial(S_UserThread *self, int listen_sd)
 
    To prevent other threads from accessing UART2, this thread must acquire
    "L_uart" in order to proceed. Once the lock is acquired, this thread sets
-   up the serial port with,
-     Serial2.begin(...)
-   and when it's time to terminate, this thread calls,
-     Serial2.end()
-   and finally releases "L_uart". At this point, this function returns.
+   up the serial port such that it interacts via a file descriptor. When it's
+   time to terminate, this thread cleans up and finally releases "L_uart". At
+   this point, this function returns.
 */
 
 void ft_serial(S_UserThread *self)
@@ -126,15 +126,43 @@ void ft_serial(S_UserThread *self)
     return ;
   }
 
-  // Initialize the serial port and then hand work over to "f_handle_serial()"
+  // Initialize the serial port and then hand work over to "f_serial_io()"
+
+  #define FT_SERIAL_RX_BUF_SIZE 1024
+  #define FT_SERIAL_TX_BUF_SIZE 0       // 0 means don't use TX ring buffer
+  #define FT_SERIAL_QUEUE_SIZE 0        // 0 means don't want an event queue
 
   self->state = UTHREAD_RUNNING ;
-  Serial2.begin(baud, SERIAL_8N1, rx_pin, tx_pin) ;
-  f_handle_serial(self, listen_sd) ;
+  uart_config_t uart_config = {
+      .baud_rate = baud,
+      .data_bits = UART_DATA_8_BITS,
+      .parity = UART_PARITY_DISABLE,
+      .stop_bits = UART_STOP_BITS_1,
+      .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+      .source_clk = UART_SCLK_DEFAULT
+    } ;
+  uart_param_config(UART_NUM_2, &uart_config) ;
+  uart_driver_install(UART_NUM_2,
+                      FT_SERIAL_RX_BUF_SIZE,
+                      FT_SERIAL_TX_BUF_SIZE,
+                      FT_SERIAL_QUEUE_SIZE,
+                      NULL,                     // uart queue (ie, no queue)
+                      0) ;                      // interrupt flags (ie, none)
+  uart_set_pin(UART_NUM_2, tx_pin, rx_pin,
+               UART_PIN_NO_CHANGE,              // RTS pin (ie, not used)
+               UART_PIN_NO_CHANGE) ;            // CTS pin (ie, not used)
+  esp_vfs_dev_uart_register() ;                 // exposes "/dev/uart/2"
+
+  // fire off the function which handles all the TCP/serial IO
+
+  f_serial_io(self, listen_sd) ;
 
   // release resources associated with the UART before releasing the lock
 
-  Serial2.end() ;
+  uart_wait_tx_done(UART_NUM_2, pdMS_TO_TICKS(100)) ;
+  uart_driver_delete(UART_NUM_2) ;
+
   xSemaphoreGive(G_runtime->L_uart) ;
   close(listen_sd) ;
+  self->state = UTHREAD_STOPPED ;
 }
