@@ -5,9 +5,10 @@
    multiplex between "listen_sd", "client_sd" and the UART
 */
 
-void f_serial_io(S_UserThread *self, int listen_sd, int uart_fd)
+void f_serial_io(S_UserThread *self, int listen_sd)
 {
   int num_fds, result, client_sd=-1 ;
+  size_t amt ;
   long long loops=0 ;
   char iobuf[BUF_LEN_LINE] ;
   fd_set rfds ;
@@ -18,11 +19,10 @@ void f_serial_io(S_UserThread *self, int listen_sd, int uart_fd)
   while(self->state == UTHREAD_RUNNING)
   {
     tv.tv_sec = 0 ;
-    tv.tv_usec = DEF_MAX_THREAD_WRAPUP_MSEC * 1000 / 4 ;
+    tv.tv_usec = 50 * 1000 ;
     FD_ZERO(&rfds) ;
-    FD_SET(uart_fd, &rfds) ;            // always monitor "uart_fd"
     FD_SET(listen_sd, &rfds) ;          // always monitor "listen_sd"
-    num_fds = max(uart_fd, listen_sd) ;
+    num_fds = listen_sd ;
 
     if (client_sd >= 0)                 // monitor "client_sd" if connected
     {
@@ -41,27 +41,28 @@ void f_serial_io(S_UserThread *self, int listen_sd, int uart_fd)
         else
           client_sd = new_sd ;          // really accept new client
       }
-      if (FD_ISSET(uart_fd, &rfds))     // incoming serial data
+      if ((client_sd >=0) && (FD_ISSET(client_sd, &rfds))) // data from client
       {
-        int amt = read(uart_fd, iobuf, BUF_LEN_LINE) ;
-        if ((amt > 0) && (client_sd >= 0) &&
-            (write(client_sd, iobuf, amt) != amt))
-        {
-          close(client_sd) ;            // TCP client disconnected ?
-          client_sd = -1 ;
-        }
-      }
-      if ((client_sd >=0 && (FD_ISSET(client_sd, &rfds))) // TCP client input
-      {
-        int amt = read(client_sd, iobuf, BUF_LEN_LINE) ;
+        amt = read(client_sd, iobuf, BUF_LEN_LINE) ;
         if (amt < 1)
         {
           close(client_sd) ;            // TCP client disconnected ?
           client_sd = -1 ;
         }
         else
-          write(uart_fd, iobuf, amt) ;
+          uart_write_bytes(UART_NUM_2, iobuf, amt) ;
       }
+    }
+
+    // now take a peek at the UART to see if data came in
+
+    amt = 0 ;
+    uart_get_buffered_data_len(UART_NUM_2, &amt) ;
+    if (amt > 0)
+    {
+      amt = uart_read_bytes(UART_NUM_2, iobuf, amt, 0) ;
+      if (amt > 0)
+        write(client_sd, iobuf, amt) ;
     }
 
     loops++ ;
@@ -172,18 +173,7 @@ void ft_serial(S_UserThread *self)
                      UART_PIN_NO_CHANGE) != ESP_OK)     // CTS pin (ie, unused)
       strncpy(self->status, "uart_set_pin() failed", BUF_LEN_UTHREAD_STATUS) ;
     else
-    {
-      esp_vfs_dev_uart_register() ;                     // exposes "/dev/uart/2"
-      int uart_fd = open("/dev/uart/2", O_RDWR | O_NONBLOCK) ;
-      if (uart_fd < 0)
-        strncpy(self->status, "cannot open /dev/uart/2",
-                BUF_LEN_UTHREAD_STATUS) ;
-      else
-      {
-        f_serial_io(self, listen_sd, uart_fd) ;         // serial/tcp main loop
-        close(uart_fd) ;
-      }
-    }
+      f_serial_io(self, listen_sd) ;            // serial/tcp main loop
   }
 
   // release resources associated with the UART before releasing the lock
