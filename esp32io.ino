@@ -377,6 +377,7 @@ void setup()
   G_runtime->L_serial_in = xSemaphoreCreateBinary() ;
   G_runtime->config.wifi_check_secs = DEF_WIFI_CHK_INT_SECS ;
   G_runtime->config.init_delay_secs = DEF_INIT_THREAD_START_SECS ;
+  G_runtime->config.uart_poll_ms = DEF_UART_POLL_MS ;
 
   // print out some info to show that we're booting up
 

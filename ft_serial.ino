@@ -19,7 +19,7 @@ void f_serial_io(S_UserThread *self, int listen_sd)
   while(self->state == UTHREAD_RUNNING)
   {
     tv.tv_sec = 0 ;
-    tv.tv_usec = 50 * 1000 ;
+    tv.tv_usec = G_runtime->config.uart_poll_ms * 1000 ;
     FD_ZERO(&rfds) ;
     FD_SET(listen_sd, &rfds) ;          // always monitor "listen_sd"
     num_fds = listen_sd ;

@@ -1,4 +1,52 @@
 /*
+   This is a convenience function called from "f_load_config()". Our job is
+   to read the "int" value from "filename" and write it into "value". We
+   return 1 if successful, otherwise 0 (probably due to file not found).
+*/
+
+int f_load_int(char *filename, int *value)
+{
+  char s[BUF_LEN_LINE] ;
+
+  File f = SPIFFS.open(filename, "r") ;
+  if (f)
+  {
+    int amt = f.readBytes(s, BUF_LEN_LINE-1) ;
+    if (amt > 0)
+    {
+      s[amt] = 0 ;
+      *value = atoi(s) ;
+      return(1) ;
+    }
+  }
+  return(0) ;
+}
+
+/*
+   This is a convenience function called from "f_load_config()". Out job is
+   to read the string value from "filename" and write it into "value", which
+   is up to "size" bytes long. The number of bytes read is returned, or -1
+   if something went wrong.
+*/
+
+int f_load_str(char *filename, char *value, int size)
+{
+  char s[size] ;
+  File f = SPIFFS.open(filename, "r") ;
+  if (f)
+  {
+    int amt = f.readBytes(s, size-1) ;
+    if (amt >= 0)
+    {
+      s[amt] = 0 ;
+      strncpy(value, s, amt) ;
+      return(strlen(s)) ;
+    }
+  }
+  return(-1) ;
+}
+
+/*
    This function is called from setup() very early in our boot up stage, just
    after our SPIFFS has been mounted. Our job is to identify any "/<name>.cfg"
    files and to load them into "G_runtime->config" where applicable.
@@ -11,68 +59,30 @@ void f_load_config()
 
   // go thru each of the fields in S_ConfigData.
 
-  f = SPIFFS.open("/debug.cfg", "r") ;                  // debug
-  if (f)
-  {
-    int amt = f.readBytes(s, BUF_LEN_LINE-1) ;
-    if (amt > 0)
-    {
-      G_runtime->config.debug = atoi(s) ;
-      Serial.printf("BOOT: read from /debug.cfg -> %d.\r\n",
-                    G_runtime->config.debug) ;
-    }
-    f.close() ;
-  }
-  f = SPIFFS.open("/init_delay_secs.cfg", "r") ;        // init_delay_secs
-  if (f)
-  {
-    int amt = f.readBytes(s, BUF_LEN_LINE-1) ;
-    if (amt > 0)
-    {
-      G_runtime->config.init_delay_secs = atoi(s) ;
-      Serial.printf("BOOT: read from /init_delay_secs.cfg -> %d.\r\n",
-                    G_runtime->config.init_delay_secs) ;
-    }
-    f.close() ;
-  }
-  f = SPIFFS.open("/wifi_ssid.cfg", "r") ;              // wifi_ssid
-  if (f)
-  {
-    int amt = f.readBytes(G_runtime->config.wifi_ssid, BUF_LEN_WIFI_SSID-1) ;
-    if (amt > 0)
-    {
-      G_runtime->config.wifi_ssid[amt] = 0 ;
-      Serial.printf("BOOT: read %d bytes from /wifi_ssid.cfg.\r\n", amt) ;
-    }
-    else
-      G_runtime->config.wifi_ssid[0] = 0 ;
-    f.close() ;
-  }
-  f = SPIFFS.open("/wifi_pw.cfg", "r") ;                // wifi_pw
-  if (f)
-  {
-    int amt = f.readBytes(G_runtime->config.wifi_pw, BUF_LEN_WIFI_PW-1) ;
-    if (amt > 0)
-    {
-      G_runtime->config.wifi_pw[amt] = 0 ;
-      Serial.printf("BOOT: read %d bytes from /wifi_pw.cfg.\r\n", amt) ;
-    }
-    else
-      G_runtime->config.wifi_pw[0] = 0 ;
-    f.close() ;
-  }
-  f = SPIFFS.open("/wifi_check_secs.cfg", "r") ;        // wifi_check_secs
-  if (f)
-  {
-    int amt = f.readBytes(s, BUF_LEN_LINE-1) ;
-    if (amt > 0)
-    {
-      G_runtime->config.wifi_check_secs = atoi(s) ;
-      Serial.printf("BOOT: read from /wifi_check_secs.cfg -> %d.\r\n",
-                    G_runtime->config.wifi_check_secs) ;
-    }
-    f.close() ;
-  }
+  if (f_load_int("/debug.cfg", &G_runtime->config.debug))
+    Serial.printf("BOOT: from /debug.cfg -> %d.\r\n",
+                  G_runtime->config.debug) ;
+
+  if (f_load_int("/init_delay_secs.cfg", &G_runtime->config.init_delay_secs))
+    Serial.printf("BOOT: from /init_delay_secs.cfg -> %d.\r\n",
+                  G_runtime->config.init_delay_secs) ;
+
+  if (f_load_str("/wifi_ssid.cfg", G_runtime->config.wifi_ssid,
+                 BUF_LEN_WIFI_SSID) > 0)
+    Serial.printf("BOOT: from /wifi_ssid.cfg -> %s.\r\n",
+                  G_runtime->config.wifi_ssid) ;
+
+  if (f_load_str("/wifi_pw.cfg", G_runtime->config.wifi_pw,
+                 BUF_LEN_WIFI_PW) > 0)
+    Serial.printf("BOOT: from /wifi_pw.cfg -> (set).\r\n") ;
+
+  if (f_load_int("/wifi_check_secs.cfg", &G_runtime->config.wifi_check_secs))
+    Serial.printf("BOOT: from /wifi_check_secs.cfg -> %d.\r\n",
+                  G_runtime->config.wifi_check_secs) ;
+
+  if (f_load_int("/uart_poll_ms.cfg", &G_runtime->config.uart_poll_ms))
+    Serial.printf("BOOT: from /uart_poll_ms.cfg -> %d.\r\n",
+                  G_runtime->config.uart_poll_ms) ;
 }
 
 /*
@@ -95,7 +105,8 @@ void f_set_cmd(int idx)
       "init_delay_secs  <int>\r\n"
       "wifi_ssid        <string>\r\n"
       "wifi_pw          <string>\r\n"
-      "wifi_check_secs  <int>\r\n",
+      "wifi_check_secs  <int>\r\n"
+      "uart_poll_ms     <int>\r\n",
       BUF_LEN_WORKER_RESULT) ;
     G_runtime->worker[idx].result_code = 400 ;
     return ;
@@ -141,6 +152,13 @@ void f_set_cmd(int idx)
     G_runtime->config.wifi_check_secs = atoi(value) ;
     snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
              "%s -> %d.\r\n", key, G_runtime->config.wifi_check_secs) ;
+  }
+  else
+  if (strcmp(key, "uart_poll_ms") == 0)
+  {
+    G_runtime->config.uart_poll_ms = atoi(value) ;
+    snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+             "%s -> %d.\r\n", key, G_runtime->config.uart_poll_ms) ;
   }
   else                                  // user specified an invalid "key"
   {
