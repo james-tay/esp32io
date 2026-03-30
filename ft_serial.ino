@@ -1,4 +1,29 @@
 /*
+   This is a short helper called from "f_serial_io()". Our job is to setup
+   the various metrics which will be exposed during the "ft_serial()" user
+   task thread's lifecycle.
+*/
+
+void f_serial_init_metrics(S_UserThread *self)
+{
+  self->result[0].result_type = UTHREAD_RESULT_INT ;
+  self->result[0].l_name[0] = "client" ;
+  self->result[0].l_data[0] = "connects" ;
+  self->result[1].result_type = UTHREAD_RESULT_INT ;
+  self->result[1].l_name[0] = "client" ;
+  self->result[1].l_data[0] = "rejects" ;
+  self->result[2].result_type = UTHREAD_RESULT_INT ;
+  self->result[2].l_name[0] = "client" ;
+  self->result[2].l_data[0] = "connected" ;
+  self->result[3].result_type = UTHREAD_RESULT_LONGLONG ;
+  self->result[3].l_name[0] = "uart_bytes" ;
+  self->result[3].l_data[0] = "read" ;
+  self->result[4].result_type = UTHREAD_RESULT_LONGLONG ;
+  self->result[4].l_name[0] = "uart_bytes" ;
+  self->result[4].l_data[0] = "written" ;
+}
+
+/*
    This function is called from "ft_serial()" when we're ready to interface
    an (incoming) TCP client with a UART. Our job is to focus on the main loop
    for the lifecycle of the serial/TCP service. We want to use "select()" to
@@ -14,12 +39,21 @@ void f_serial_io(S_UserThread *self, int listen_sd)
   fd_set rfds ;
   struct timeval tv ;
 
+  f_serial_init_metrics(self) ;         // init our metrics, we only run once
+
   // use short "select()" cycles, be ready for a quick exit in the main loop
 
   while(self->state == UTHREAD_RUNNING)
   {
+    // setup select()'s poll duration, but sanity check it
+
     tv.tv_sec = 0 ;
     tv.tv_usec = G_runtime->config.uart_poll_ms * 1000 ;
+    if (tv.tv_usec < 1000)
+      tv.tv_usec = 1000 ;                                       // minimum 1ms
+    if (tv.tv_usec > DEF_MAX_THREAD_WRAPUP_MSEC * 1000 / 2)
+      tv.tv_usec = DEF_MAX_THREAD_WRAPUP_MSEC * 1000 / 2 ;      // not too long
+
     FD_ZERO(&rfds) ;
     FD_SET(listen_sd, &rfds) ;          // always monitor "listen_sd"
     num_fds = listen_sd ;
@@ -37,9 +71,16 @@ void f_serial_io(S_UserThread *self, int listen_sd)
       {
         int new_sd = accept(listen_sd, NULL, NULL) ;
         if (client_sd >= 0)
+        {
           close(new_sd) ;               // already have a connected client
+          self->result[1].i_value++ ;   // client rejects
+        }
         else
+        {
           client_sd = new_sd ;          // really accept new client
+          self->result[0].i_value++ ;   // client connects
+          self->result[2].i_value = 1 ; // client is connected
+        }
       }
       if ((client_sd >=0) && (FD_ISSET(client_sd, &rfds))) // data from client
       {
@@ -48,9 +89,13 @@ void f_serial_io(S_UserThread *self, int listen_sd)
         {
           close(client_sd) ;            // TCP client disconnected ?
           client_sd = -1 ;
+          self->result[2].i_value = 0 ; // client is not connected
         }
         else
+        {
           uart_write_bytes(UART_NUM_2, iobuf, amt) ;
+          self->result[4].ll_value += amt ;             // uart bytes read
+        }
       }
     }
 
@@ -62,7 +107,10 @@ void f_serial_io(S_UserThread *self, int listen_sd)
     {
       amt = uart_read_bytes(UART_NUM_2, iobuf, amt, 0) ;
       if (amt > 0)
+      {
         write(client_sd, iobuf, amt) ;
+        self->result[3].ll_value += amt ;               // uart bytes read
+      }
     }
 
     loops++ ;
