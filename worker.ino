@@ -36,6 +36,50 @@ int f_parse(char *src, char **tokens, int max_tokens)
 }
 
 /*
+   This function is called from "f_action()". Our job is to perform a digital
+   or analog read on the user specified pin.
+*/
+
+void f_pin_read_cmd(int idx)
+{
+  char *tokens[2] ;
+
+  int count = f_parse(G_runtime->worker[idx].cmd, tokens, 2) ;
+  if (count != 2)
+  {
+    strncpy(G_runtime->worker[idx].result_msg, "Invalid command.\r\n",
+            BUF_LEN_WORKER_RESULT) ;
+    G_runtime->worker[idx].result_code = 400 ;
+    return ;
+  }
+
+  char *cmd = tokens[0] ;
+  int pin = atoi(tokens[1]) ;
+
+  pinMode(pin, INPUT) ;
+
+  if (strcmp(cmd, "aread") == 0)
+  {
+    snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+             "analogRead pin:%d - %d\r\n", pin, analogRead(pin)) ;
+    G_runtime->worker[idx].result_code = 200 ;
+  }
+  else
+  if (strcmp(cmd, "dread") == 0)
+  {
+    snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+             "digitalRead pin:%d - %d\r\n", pin, digitalRead(pin)) ;
+    G_runtime->worker[idx].result_code = 200 ;
+  }
+  else
+  {
+    strncpy(G_runtime->worker[idx].result_msg, "Invalid command.\r\n",
+            BUF_LEN_WORKER_RESULT) ;
+    G_runtime->worker[idx].result_code = 400 ;
+  }
+}
+
+/*
    This function is called from "f_action()" when we're called with either the
    "hi" or "lo" commands. Note that "hi" or "lo" commands may include an
    optional number of microseconds to pulse the pin at.
@@ -206,6 +250,9 @@ void f_version_cmd(int idx)
    write to our "result_msg" and "result_code". If we're calling another
    function to do the work, then it falls to that function to write to our
    "result_msg" and "result_code".
+
+   This function can be indirectly called from "f_handle_camera()" when it
+   assigns the "/cam" uri to a worker thread's "cmd".
 */
 
 void f_action(int idx)
@@ -230,9 +277,11 @@ void f_action(int idx)
   if (strcmp(keyword, "help") == 0)
   {
     strncpy(G_runtime->worker[idx].result_msg,
+      "aread <pin>      analog read\r\n"
       "cam ...          camera management\r\n"
       "dht22 <pin>      poll temperature and humidity\r\n"
-      "ds18b20 <pin>    poll temperature sensor\r\n"
+      "dread <pin>      digital read\r\n"
+      "ds18b20 <pin>    poll temperature sensor(s)\r\n"
       "fs ...           filesystem management\r\n"
       "hi <pin> [usec]  set a pin high or pulse it high\r\n"
       "ps               threads cpu time consumed\r\n"
@@ -249,14 +298,20 @@ void f_action(int idx)
     G_runtime->worker[idx].result_code = 200 ;
   }
   else
-  if (strncmp(keyword, "/cam", 4) == 0)                         // "/cam"
-    f_process_camera(idx) ;
+  if (strcmp(keyword, "aread") == 0)                            // aread
+    f_pin_read_cmd(idx) ;
   else
   if (strcmp(keyword, "cam") == 0)                              // cam
     f_cam_cmd(idx) ;
   else
+  if (strcmp(keyword, "/cam") == 0)                             // webclient
+    f_process_camera(idx) ;
+  else
   if (strcmp(keyword, "dht22") == 0)                            // dht22
     f_dht22_cmd(idx) ;
+  else
+  if (strcmp(keyword, "dread") == 0)                            // dread
+    f_pin_read_cmd(idx) ;
   else
   if (strcmp(keyword, "ds18b20") == 0)                          // ds18b20
     f_ds18b20_cmd(idx) ;
