@@ -7,6 +7,7 @@
 // third party libraries
 
 #include <OneWire.h>
+#include <PubSubClient.h>
 
 // esp-idf - https://github.com/espressif/esp-idf/tree/master/components
 
@@ -84,6 +85,8 @@
 #define BUF_LEN_ERR 96                  // generic error message buffer
 #define BUF_LEN_UTHREAD_STATUS 80       // optional user thread status message
 #define BUF_LEN_UTASK_FILESIZE 1024     // max size of user task files
+#define BUF_LEN_MQTT_SETUP 96           // MQTT credentials, server and port
+#define BUF_LEN_MQTT_TOPIC 64           // MQTT topic name max length
 
 // worker thread states
 
@@ -201,6 +204,11 @@ struct config_data {
   char wifi_pw[BUF_LEN_WIFI_PW] ;
   int wifi_check_secs ;
 
+  // MQTT settings
+
+  char mqtt_setup[BUF_LEN_MQTT_SETUP] ; // <user>:<pw>@<server>:<port>
+  char mqtt_topic[BUF_LEN_MQTT_TOPIC] ; // the MQTT topic we publish to
+
   // misc settings
 
   int init_delay_secs ;                 // secs before running "/init.thread"
@@ -231,6 +239,11 @@ struct runtime_data {
   char serial_buf[BUF_LEN_CONSOLE] ;
   TaskHandle_t sconsole_handle ;        // from xTaskCreatePinnedToCore() call
 
+  // the MQTT pub/sub section
+
+  WiFiClient wifi_client ;              // used by "PubSubClient()" only
+  PubSubClient *ps_client ;             // NULL, until configured
+
   // web server data structures
 
   S_WebClient webclients[DEF_WEBSERVER_MAX_CLIENTS] ;
@@ -258,6 +271,7 @@ struct runtime_data {
   SemaphoreHandle_t L_serial_in ;       // unlocked when serial data arrives
   SemaphoreHandle_t L_uart ;            // the Serial2 (aka UART2) hardware
   SemaphoreHandle_t L_uthread ;         // lock at thread setup and termination
+  SemaphoreHandle_t L_pubsub ;          // lock before using "ps_client"
 
   // various performance metrics
 

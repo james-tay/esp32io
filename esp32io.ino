@@ -145,6 +145,10 @@
      G_runtime->config.wifi_ssid
      G_runtime->config.wifi_pw
 
+   The MQTT subsystem can be optionally configured by setting "mqtt_setup"
+   and "mqtt_topic". The MQTT subsystem remains in an uninitialized state
+   until the "mqtt connect" command is issued.
+
    COMMAND EXECUTION
 
    In general, commands are entered from the serial console, or via the web
@@ -374,6 +378,7 @@ void setup()
   G_runtime->L_worker = xSemaphoreCreateMutex() ;
   G_runtime->L_uthread = xSemaphoreCreateMutex() ;
   G_runtime->L_uart = xSemaphoreCreateMutex() ;
+  G_runtime->L_pubsub = xSemaphoreCreateMutex() ;
   G_runtime->L_serial_in = xSemaphoreCreateBinary() ;
   G_runtime->config.wifi_check_secs = DEF_WIFI_CHK_INT_SECS ;
   G_runtime->config.init_delay_secs = DEF_INIT_THREAD_START_SECS ;

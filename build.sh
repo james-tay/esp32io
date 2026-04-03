@@ -11,6 +11,9 @@
 #     - OneWire version 2.3.8
 #       (see https://www.pjrc.com/teensy/td_libs_OneWire.html)
 #       $ arduino-cli lib install OneWire@2.3.8
+#     - PubSubClient version 2.8
+#       (see http://pubsubclient.knolleary.net)
+#       $ arduino-cli lib install PubSubClient@2.8
 #
 # USAGE
 #
