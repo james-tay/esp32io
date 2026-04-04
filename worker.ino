@@ -286,6 +286,7 @@ void f_action(int idx)
       "hi <pin> [usec]  set a pin high or pulse it high\r\n"
       "ps               threads cpu time consumed\r\n"
       "lo <pin> [usec]  set a pin low or pulse it low\r\n"
+      "mqtt ...         manage MQTT\r\n"
       "ntp <server>     update local clock\r\n"
       "ota <url>        perform a software update\r\n"
       "reload           reload/reboot the device\r\n"
@@ -327,6 +328,9 @@ void f_action(int idx)
   else
   if (strcmp(keyword, "lo") == 0)                               // lo
     f_hi_lo_cmd(idx) ;
+  else
+  if (strcmp(keyword, "mqtt") == 0)                             // mqtt
+    f_mqtt_cmd(idx) ;
   else
   if (strcmp(keyword, "ntp") == 0)                              // ntp
     f_ntp_cmd(idx) ;

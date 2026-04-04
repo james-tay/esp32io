@@ -229,6 +229,7 @@ struct runtime_data {
 
   int fs_online ;                       // what SPIFFS.begin() returned
   int request_reload ;                  // 0=normal, 1=reload
+  int pubsub_state ;                    // 0=unconfigured/offline 1=online
   char cmd_buf[BUF_LEN_LINE] ;          // used in main "loop()"
   long long ts_last_blink ;             // timestamp of last LED blink
   long long ts_last_wifi_check ;        // timestamp of last wifi status check
@@ -238,11 +239,6 @@ struct runtime_data {
   int serial_buf_pos ;
   char serial_buf[BUF_LEN_CONSOLE] ;
   TaskHandle_t sconsole_handle ;        // from xTaskCreatePinnedToCore() call
-
-  // the MQTT pub/sub section
-
-  WiFiClient wifi_client ;              // used by "PubSubClient()" only
-  PubSubClient *ps_client ;             // NULL, until configured
 
   // web server data structures
 

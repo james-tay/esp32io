@@ -112,7 +112,7 @@ void f_set_cmd(int idx)
     strncpy(G_runtime->worker[idx].result_msg,
       "debug            <int>\r\n"
       "init_delay_secs  <int>\r\n"
-      "mqtt_setup       <user>:<pw>@<host>:<port>\r\n"
+      "mqtt_setup       <user>:<pw>@<server>:<port>\r\n"
       "mqtt_topic       <string>\r\n"
       "wifi_ssid        <string>\r\n"
       "wifi_pw          <string>\r\n"

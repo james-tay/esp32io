@@ -197,6 +197,8 @@
 // Global Variables
 
 S_RuntimeData *G_runtime=NULL ;
+WiFiClient G_wClient ;                          // used by G_psClient only
+PubSubClient G_psClient(G_wClient) ;            // a class object
 
 // ============================================================================
 
