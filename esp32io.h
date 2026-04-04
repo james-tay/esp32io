@@ -33,6 +33,7 @@
 #define DEF_WORKER_FIND_MAX_MS 500      // max delay between finding workers
 #define DEF_WIFI_BEGIN_WAIT_SECS 30     // how long to wait after WiFi.begin()
 #define DEF_WIFI_CHK_INT_SECS 30        // how often to check wifi status
+#define DEF_MQTT_CHECK_INT_SECS 10      // how often to check MQTT status
 #define DEF_MAX_FILENAME_LEN 30         // maximum filename length on SPIFFS
 #define DEF_NTP_TIMEOUT_MSEC 10000      // how long we wait for ntp to sync
 #define DEF_INIT_THREAD_START_SECS 60   // autorun "/init.thread" at this time
@@ -208,6 +209,7 @@ struct config_data {
 
   char mqtt_setup[BUF_LEN_MQTT_SETUP] ; // <user>:<pw>@<server>:<port>
   char mqtt_topic[BUF_LEN_MQTT_TOPIC] ; // the MQTT topic we publish to
+  int mqtt_check_secs ;
 
   // misc settings
 
@@ -233,6 +235,7 @@ struct runtime_data {
   char cmd_buf[BUF_LEN_LINE] ;          // used in main "loop()"
   long long ts_last_blink ;             // timestamp of last LED blink
   long long ts_last_wifi_check ;        // timestamp of last wifi status check
+  long long ts_last_mqtt_check ;        // timestamp of last MQTT status check
 
   // serial console data structures
 

@@ -383,6 +383,7 @@ void setup()
   G_runtime->L_pubsub = xSemaphoreCreateMutex() ;
   G_runtime->L_serial_in = xSemaphoreCreateBinary() ;
   G_runtime->config.wifi_check_secs = DEF_WIFI_CHK_INT_SECS ;
+  G_runtime->config.mqtt_check_secs = DEF_MQTT_CHECK_INT_SECS ;
   G_runtime->config.init_delay_secs = DEF_INIT_THREAD_START_SECS ;
   G_runtime->config.uart_poll_ms = DEF_UART_POLL_MS ;
 
@@ -508,7 +509,7 @@ void loop()
   // periodically check if our wifi is not connected, and reconnect if needed
 
   if (now > G_runtime->ts_last_wifi_check +
-            (G_runtime->config.wifi_check_secs * 1000000))
+            (G_runtime->config.wifi_check_secs * 1000 * 1000))
   {
     if ((WiFi.status() != WL_CONNECTED) &&
         (strlen(G_runtime->config.wifi_ssid) > 0) &&
@@ -519,8 +520,15 @@ void loop()
 
   // if the MQTT subsystem is expected to be online, but isn't, do something
 
-
-
+  if ((G_runtime->pubsub_state) &&
+      (now > G_runtime->ts_last_mqtt_check +
+             (G_runtime->config.mqtt_check_secs * 1000 * 1000)))
+  {
+    G_psClient.loop() ; // MQTT updates internal state, mostly non-blocking
+    if ((G_psClient.state() != MQTT_CONNECTED) || (!G_psClient.connected()))
+      f_mqtt_connect(-1) ;
+    G_runtime->ts_last_mqtt_check = now ;
+  }
 
   // if user requested a reload, set LED to red until we die
 

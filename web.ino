@@ -251,6 +251,8 @@ void f_handle_core_metrics(int idx)
     strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
     snprintf(s, l, "ec_mqtt_connect_fails %ld\n", r->mqtt_connect_fails) ;
     strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
+    snprintf(s, l, "ec_mqtt_connected %d\n", G_psClient.connected()) ;
+    strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
     snprintf(s, l, "ec_mqtt_state %d\n", G_psClient.state()) ;
     strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
   }

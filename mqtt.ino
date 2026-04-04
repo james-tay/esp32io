@@ -34,9 +34,11 @@ char *f_mqtt_state(int cur_state)
 }
 
 /*
-   This function is called from "f_mqtt_cmd()" our job is to parse the
-   "mqtt_setup" config and then attempt to connect to the MQTT server. In
-   order to do this, we'll have to use "strtok_r()" to operate on the buffer.
+   This function is called from "f_mqtt_cmd()" or the main "loop()". Our job
+   is to parse the "mqtt_setup" config and then attempt to connect to the MQTT
+   server. In order to do this, we'll have to use "strtok_r()" to operate on
+   the buffer. Note that when called from the main "loop()", "idx" will be set
+   to "-1".
 */
 
 void f_mqtt_connect(int idx)
@@ -51,9 +53,12 @@ void f_mqtt_connect(int idx)
 
   if ((G_runtime->pubsub_state) && (G_psClient.connected()))
   {
-    strncpy(G_runtime->worker[idx].result_msg, "MQTT already online.\r\n",
-            BUF_LEN_WORKER_RESULT) ;
-    G_runtime->worker[idx].result_code = 200 ;
+    if (idx >= 0)
+    {
+      strncpy(G_runtime->worker[idx].result_msg, "MQTT already online.\r\n",
+              BUF_LEN_WORKER_RESULT) ;
+      G_runtime->worker[idx].result_code = 200 ;
+    }
     return ;
   }
 
@@ -83,37 +88,53 @@ void f_mqtt_connect(int idx)
 
   if (fault)
   {
-    strncpy(G_runtime->worker[idx].result_msg, "Invalid 'mqtt_setup'.\r\n",
-            BUF_LEN_WORKER_RESULT) ;
-    G_runtime->worker[idx].result_code = 400 ;
+    if (idx >= 0)
+    {
+      strncpy(G_runtime->worker[idx].result_msg, "Invalid 'mqtt_setup'.\r\n",
+              BUF_LEN_WORKER_RESULT) ;
+      G_runtime->worker[idx].result_code = 400 ;
+    }
     return ;
   }
   if (strlen(G_runtime->config.mqtt_topic) < 1)
   {
-    strncpy(G_runtime->worker[idx].result_msg, "Invalid 'mqtt_topic'.\r\n",
-            BUF_LEN_WORKER_RESULT) ;
-    G_runtime->worker[idx].result_code = 400 ;
+    if (idx >= 0)
+    {
+      strncpy(G_runtime->worker[idx].result_msg, "Invalid 'mqtt_topic'.\r\n",
+              BUF_LEN_WORKER_RESULT) ;
+      G_runtime->worker[idx].result_code = 400 ;
+    }
     return ;
   }
 
   // at this point, we have successfully parsed our MQTT configuration
 
   G_psClient.setServer(cfg_server, port) ;
+  if (G_runtime->config.debug)
+    Serial.printf("DEBUG: f_mqtt_connect() state:%d connecting to %s:%d\r\n",
+                  G_psClient.state(), cfg_server, port) ;
+
   if (G_psClient.connect(PUBSUB_CLIENT_NAME, cfg_user, cfg_pw))
   {
-    strncpy(G_runtime->worker[idx].result_msg, "Connected\r\n",
-            BUF_LEN_WORKER_RESULT) ;
-    G_runtime->worker[idx].result_code = 200 ;
-    G_runtime->pubsub_state = 1 ;
+    if (idx >= 0)
+    {
+      strncpy(G_runtime->worker[idx].result_msg, "Connected\r\n",
+              BUF_LEN_WORKER_RESULT) ;
+      G_runtime->worker[idx].result_code = 200 ;
+      G_runtime->pubsub_state = 1 ;
+    }
     G_runtime->mqtt_connect_ts = esp_timer_get_time() ;
     G_runtime->mqtt_connects++ ;
   }
   else
   {
-    snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
-             "Connection failed - %s\r\n", f_mqtt_state(G_psClient.state())) ;
-    G_runtime->worker[idx].result_code = 500 ;
-    G_runtime->pubsub_state = 0 ;
+    if (idx >= 0)
+    {
+      snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+               "Connection failed - %s\r\n", f_mqtt_state(G_psClient.state())) ;
+      G_runtime->worker[idx].result_code = 500 ;
+      G_runtime->pubsub_state = 0 ;
+    }
     G_runtime->mqtt_connect_fails++ ;
   }
 }
