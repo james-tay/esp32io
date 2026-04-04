@@ -241,6 +241,20 @@ void f_handle_core_metrics(int idx)
   snprintf(s, l, "ec_web_idle_timeouts %lu\n", r->web_idle_timeouts) ;
   strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
 
+  // if the MQTT subsystem is setup
+
+  if (r->pubsub_state)
+  {
+    snprintf(s, l, "ec_mqtt_ts_last_connect %lld\n", r->mqtt_connect_ts) ;
+    strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
+    snprintf(s, l, "ec_mqtt_connects %ld\n", r->mqtt_connects) ;
+    strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
+    snprintf(s, l, "ec_mqtt_connect_fails %ld\n", r->mqtt_connect_fails) ;
+    strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
+    snprintf(s, l, "ec_mqtt_state %d\n", G_psClient.state()) ;
+    strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
+  }
+
   // if the camera subsystem is configured, expose its metrics
 
   if (r->cam_data)

@@ -9,21 +9,25 @@ char *f_mqtt_state(int cur_state)
 
   switch(cur_state)
   {
-    case MQTT_CONNECTION_TIMEOUT: 
+    case MQTT_CONNECTION_TIMEOUT:                               // -4
       state = "MQTT_CONNECTION_TIMEOUT" ; break ;
-    case MQTT_CONNECTION_LOST:
-      state = "MQTT_CONNECTION_LIST" ; break ;
-    case MQTT_CONNECT_FAILED:
+    case MQTT_CONNECTION_LOST:                                  // -3
+      state = "MQTT_CONNECTION_LOST" ; break ;
+    case MQTT_CONNECT_FAILED:                                   // -2
       state = "MQTT_CONNECT_FAILED" ; break ;
-    case MQTT_CONNECTED:
+    case MQTT_DISCONNECTED:                                     // -1
+      state = "MQTT_DISCONNECTED" ; break ;
+    case MQTT_CONNECTED:                                        // 0
       state = "MQTT_CONNECTED" ; break ;
-    case MQTT_CONNECT_BAD_PROTOCOL:
+    case MQTT_CONNECT_BAD_PROTOCOL:                             // 1
       state = "MQTT_CONNECT_BAD_PROTOCOL" ; break ;
-    case MQTT_CONNECT_BAD_CLIENT_ID:
+    case MQTT_CONNECT_BAD_CLIENT_ID:                            // 2
       state = "MQTT_CONNECT_BAD_CLIENT_ID" ; break ;
-    case MQTT_CONNECT_BAD_CREDENTIALS: 
+    case MQTT_CONNECT_UNAVAILABLE:                              // 3
+      state = "MQTT_CONNECT_UNAVAILABLE" ; break ;
+    case MQTT_CONNECT_BAD_CREDENTIALS:                          // 4
       state = "MQTT_CONNECT_BAD_CREDENTIALS" ; break ;
-    case MQTT_CONNECT_UNAUTHORIZED:
+    case MQTT_CONNECT_UNAUTHORIZED:                             // 5
       state = "MQTT_CONNECT_UNAUTHORIZED" ; break ;
   }
   return(state) ;
@@ -101,6 +105,8 @@ void f_mqtt_connect(int idx)
             BUF_LEN_WORKER_RESULT) ;
     G_runtime->worker[idx].result_code = 200 ;
     G_runtime->pubsub_state = 1 ;
+    G_runtime->mqtt_connect_ts = esp_timer_get_time() ;
+    G_runtime->mqtt_connects++ ;
   }
   else
   {
@@ -108,6 +114,7 @@ void f_mqtt_connect(int idx)
              "Connection failed - %s\r\n", f_mqtt_state(G_psClient.state())) ;
     G_runtime->worker[idx].result_code = 500 ;
     G_runtime->pubsub_state = 0 ;
+    G_runtime->mqtt_connect_fails++ ;
   }
 }
 

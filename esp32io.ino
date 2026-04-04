@@ -517,6 +517,11 @@ void loop()
     G_runtime->ts_last_wifi_check = now ;
   }
 
+  // if the MQTT subsystem is expected to be online, but isn't, do something
+
+
+
+
   // if user requested a reload, set LED to red until we die
 
   if (G_runtime->request_reload)

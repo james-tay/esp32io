@@ -287,5 +287,11 @@ struct runtime_data {
   unsigned long web_idle_timeouts ;             // HTTP client idled too long
   unsigned long wifi_connects ;                 // calls to f_wifi_connect()
 
+  // MQTT performance metrics
+
+  long long mqtt_connect_ts ;                   // timestamp of connection
+  unsigned long mqtt_connects ;                 // connection attempts
+  unsigned long mqtt_connect_fails ;            // attempts which failed
+
 } ; typedef struct runtime_data S_RuntimeData ;
 
