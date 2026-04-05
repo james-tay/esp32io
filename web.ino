@@ -255,6 +255,12 @@ void f_handle_core_metrics(int idx)
     strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
     snprintf(s, l, "ec_mqtt_state %d\n", G_psClient.state()) ;
     strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
+    snprintf(s, l, "ec_mqtt_lock_failed %lld\n", r->mqtt_lock_failed) ;
+    strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
+    snprintf(s, l, "ec_mqtt_publish_success %ld\n", r->mqtt_publish_success) ;
+    strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
+    snprintf(s, l, "ec_mqtt_publish_failed %ld\n", r->mqtt_publish_failed) ;
+    strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
   }
 
   // if the camera subsystem is configured, expose its metrics

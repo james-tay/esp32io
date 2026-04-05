@@ -524,7 +524,15 @@ void loop()
       (now > G_runtime->ts_last_mqtt_check +
              (G_runtime->config.mqtt_check_secs * 1000 * 1000)))
   {
-    G_psClient.loop() ; // MQTT updates internal state, mostly non-blocking
+    if (xSemaphoreTake(G_runtime->L_pubsub,
+                       pdMS_TO_TICKS(DEF_MQTT_LOCK_WAIT_MSEC)) == pdTRUE)
+    {
+      G_psClient.loop() ; // MQTT updates internal state, mostly non-blocking
+      xSemaphoreGive(G_runtime->L_pubsub) ;
+    }
+    else
+      G_runtime->mqtt_lock_failed++ ;
+
     if ((G_psClient.state() != MQTT_CONNECTED) || (!G_psClient.connected()))
       f_mqtt_connect(-1) ;
     G_runtime->ts_last_mqtt_check = now ;

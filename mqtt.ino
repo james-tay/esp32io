@@ -107,13 +107,11 @@ void f_mqtt_connect(int idx)
     return ;
   }
 
-  // at this point, we have successfully parsed our MQTT configuration
+  // at this point, we have successfully parsed our MQTT configuration. Note
+  // that for some reason, we cannot acquire "L_pubsub" at this time, as it
+  // results in "connect()" hanging and causing a stacktrace.
 
   G_psClient.setServer(cfg_server, port) ;
-  if (G_runtime->config.debug)
-    Serial.printf("DEBUG: f_mqtt_connect() state:%d connecting to %s:%d\r\n",
-                  G_psClient.state(), cfg_server, port) ;
-
   if (G_psClient.connect(PUBSUB_CLIENT_NAME, cfg_user, cfg_pw))
   {
     if (idx >= 0)
@@ -137,6 +135,33 @@ void f_mqtt_connect(int idx)
     }
     G_runtime->mqtt_connect_fails++ ;
   }
+}
+
+/*
+   This function is called from "f_mqtt_cmd()". Our job is to publish "msg"
+   to our currently configured "mqtt_topic".
+*/
+
+void f_mqtt_publish(int idx, char *msg)
+{
+  if (xSemaphoreTake(G_runtime->L_pubsub,
+                     pdMS_TO_TICKS(DEF_MQTT_LOCK_WAIT_MSEC)) != pdTRUE)
+  {
+    if (idx >= 0)
+    {
+      strncpy(G_runtime->worker[idx].result_msg, "Cannot acquire L_pubsub\r\n",
+              BUF_LEN_WORKER_RESULT) ;
+      G_runtime->worker[idx].result_code = 500 ;
+    }
+    G_runtime->mqtt_lock_failed++ ;
+    return ;
+  }
+  if (G_psClient.publish(G_runtime->config.mqtt_topic, msg))
+    G_runtime->mqtt_publish_success++ ;
+  else
+    G_runtime->mqtt_publish_failed++ ;
+
+  xSemaphoreGive(G_runtime->L_pubsub) ;
 }
 
 /*
@@ -170,28 +195,31 @@ void f_mqtt_status(int idx)
 
 void f_mqtt_cmd(int idx)
 {
-  char *tokens[2], *cmd=NULL, *key=NULL ;
-  if (f_parse(G_runtime->worker[idx].cmd, tokens, 2) != 2)
+  char *tokens[3], *cmd=NULL, *key=NULL, *value=NULL ;
+  int amt = f_parse(G_runtime->worker[idx].cmd, tokens, 3) ;
+  if (amt < 2)
   {
     strncpy(G_runtime->worker[idx].result_msg,
-            "connect    connect to MQTT server\r\n"
-            "status     print our current MQTT status\r\n",
+            "connect            connect to MQTT server\r\n"
+            "publish <str>      publish to our default topic\r\n"
+            "status             print our current MQTT status\r\n",
             BUF_LEN_WORKER_RESULT) ;
     G_runtime->worker[idx].result_code = 400 ;
     return ;
   }
   cmd = tokens[0] ;             // this is always "mqtt"
   key = tokens[1] ;             // the MQTT task the user requested
+  if (amt == 3)
+    value = tokens[2] ;
 
   if (strcmp(key, "connect") == 0)
-  {
     f_mqtt_connect(idx) ;
-  }
+  else
+  if (strcmp(key, "publish") == 0)
+    f_mqtt_publish(idx, value) ;
   else
   if (strcmp(key, "status") == 0)
-  {
     f_mqtt_status(idx) ;
-  }
   else
   {
     strncpy(G_runtime->worker[idx].result_msg, "Invalid command.\r\n",

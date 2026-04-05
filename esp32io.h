@@ -34,6 +34,7 @@
 #define DEF_WIFI_BEGIN_WAIT_SECS 30     // how long to wait after WiFi.begin()
 #define DEF_WIFI_CHK_INT_SECS 30        // how often to check wifi status
 #define DEF_MQTT_CHECK_INT_SECS 10      // how often to check MQTT status
+#define DEF_MQTT_LOCK_WAIT_MSEC 500     // how long we wait to acquire L_pubsub
 #define DEF_MAX_FILENAME_LEN 30         // maximum filename length on SPIFFS
 #define DEF_NTP_TIMEOUT_MSEC 10000      // how long we wait for ntp to sync
 #define DEF_INIT_THREAD_START_SECS 60   // autorun "/init.thread" at this time
@@ -293,8 +294,11 @@ struct runtime_data {
   // MQTT performance metrics
 
   long long mqtt_connect_ts ;                   // timestamp of connection
+  long long mqtt_lock_failed ;                  // cannot acquire L_pubsub
   unsigned long mqtt_connects ;                 // connection attempts
   unsigned long mqtt_connect_fails ;            // attempts which failed
+  unsigned long mqtt_publish_success ;          // successful publish attempts
+  unsigned long mqtt_publish_failed ;           // failed publish attempts
 
 } ; typedef struct runtime_data S_RuntimeData ;
 

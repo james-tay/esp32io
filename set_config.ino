@@ -67,6 +67,10 @@ void f_load_config()
     Serial.printf("BOOT: from /init_delay_secs.cfg -> %d.\r\n",
                   G_runtime->config.init_delay_secs) ;
 
+  if (f_load_int("/mqtt_check_secs.cfg", &G_runtime->config.mqtt_check_secs))
+    Serial.printf("BOOT: from /mqtt_check_secs.cfg -> %d.\r\n",
+                  G_runtime->config.mqtt_check_secs) ;
+
   if (f_load_str("/mqtt_setup.cfg", G_runtime->config.mqtt_setup,
                  BUF_LEN_MQTT_SETUP) > 0)
     Serial.printf("BOOT: from /mqtt_setup.cfg -> (set).\r\n") ;
@@ -112,6 +116,7 @@ void f_set_cmd(int idx)
     strncpy(G_runtime->worker[idx].result_msg,
       "debug            <int>\r\n"
       "init_delay_secs  <int>\r\n"
+      "mqtt_check_secs  <int>\r\n"
       "mqtt_setup       <user>:<pw>@<server>:<port>\r\n"
       "mqtt_topic       <string>\r\n"
       "wifi_ssid        <string>\r\n"
@@ -144,6 +149,13 @@ void f_set_cmd(int idx)
     G_runtime->config.init_delay_secs = atoi(value) ;
     snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
              "%s -> %d.\r\n", key, G_runtime->config.init_delay_secs) ;
+  }
+  else
+  if (strcmp(key, "mqtt_check_secs") == 0)
+  {
+    G_runtime->config.mqtt_check_secs = atoi(value) ;
+    snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+             "%s -> %d.\r\n", key, G_runtime->config.mqtt_check_secs) ;
   }
   else
   if (strcmp(key, "mqtt_setup") == 0)
