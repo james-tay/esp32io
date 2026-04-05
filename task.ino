@@ -114,7 +114,7 @@ void f_task_help(int idx)
           "[User Task Threads - Config Refrence]\r\n"
           "ft_dht22:<c>,<dataPin>,<pwrPin>,<intervalSecs>\r\n"
           "ft_ds18b20:<c>,<dataPin>,<pwrPin>,<intervalSecs>\r\n"
-          "ft_serial:<c>,<tcpPort>,<baud>,<rxPin>,<txPin>\r\n"
+          "ft_serial:<c>,<tcpPort>,<baud>,<rxPin>,<txPin>,<pollMSecs>\r\n"
           "ft_utasks:<c>,<filename>\r\n"
           "ft_wg:<c>,<startupSecs>,<intervalSecs>,<noActivitySecs>\r\n",
           BUF_LEN_WORKER_RESULT) ;

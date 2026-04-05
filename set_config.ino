@@ -92,10 +92,6 @@ void f_load_config()
   if (f_load_int("/wifi_check_secs.cfg", &G_runtime->config.wifi_check_secs))
     Serial.printf("BOOT: from /wifi_check_secs.cfg -> %d.\r\n",
                   G_runtime->config.wifi_check_secs) ;
-
-  if (f_load_int("/uart_poll_ms.cfg", &G_runtime->config.uart_poll_ms))
-    Serial.printf("BOOT: from /uart_poll_ms.cfg -> %d.\r\n",
-                  G_runtime->config.uart_poll_ms) ;
 }
 
 /*
@@ -114,15 +110,14 @@ void f_set_cmd(int idx)
   if (f_parse(G_runtime->worker[idx].cmd, tokens, 3) != 3)      // print help
   {
     strncpy(G_runtime->worker[idx].result_msg,
-      "debug            <int>\r\n"
-      "init_delay_secs  <int>\r\n"
-      "mqtt_check_secs  <int>\r\n"
+      "debug            <int>           debug mode\r\n"
+      "init_delay_secs  <int>           delay before running /init.thread\r\n"
+      "mqtt_check_secs  <int>           MQTT connection check interval\r\n"
       "mqtt_setup       <user>:<pw>@<server>:<port>\r\n"
-      "mqtt_topic       <string>\r\n"
-      "wifi_ssid        <string>\r\n"
-      "wifi_pw          <string>\r\n"
-      "wifi_check_secs  <int>\r\n"
-      "uart_poll_ms     <int>\r\n",
+      "mqtt_topic       <string>        MQTT publish topic\r\n"
+      "wifi_ssid        <string>        Wifi SSID we connect to\r\n"
+      "wifi_pw          <string>        Wifi SSID password\r\n"
+      "wifi_check_secs  <int>           Wifi connection check interval\r\n",
       BUF_LEN_WORKER_RESULT) ;
     G_runtime->worker[idx].result_code = 400 ;
     return ;
@@ -187,13 +182,6 @@ void f_set_cmd(int idx)
     G_runtime->config.wifi_check_secs = atoi(value) ;
     snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
              "%s -> %d.\r\n", key, G_runtime->config.wifi_check_secs) ;
-  }
-  else
-  if (strcmp(key, "uart_poll_ms") == 0)
-  {
-    G_runtime->config.uart_poll_ms = atoi(value) ;
-    snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
-             "%s -> %d.\r\n", key, G_runtime->config.uart_poll_ms) ;
   }
   else                                  // user specified an invalid "key"
   {

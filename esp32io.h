@@ -39,7 +39,6 @@
 #define DEF_NTP_TIMEOUT_MSEC 10000      // how long we wait for ntp to sync
 #define DEF_INIT_THREAD_START_SECS 60   // autorun "/init.thread" at this time
 #define DEF_ANON_CALLER -255            // anonymous worker thread "caller"
-#define DEF_UART_POLL_MS 50             // how often "f_serial_io()" polls
 #define DEF_UTHREAD_CALLER_OFFSET 1000  // user task thread's "caller" offset
 
 // stack sizes for various threads
@@ -216,7 +215,6 @@ struct config_data {
 
   int init_delay_secs ;                 // secs before running "/init.thread"
   int debug ;                           // 0=none, 1=debug
-  int uart_poll_ms ;                    // how often "f_serial_io()" polls
 
 } ; typedef struct config_data S_ConfigData ;
 

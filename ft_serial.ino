@@ -30,7 +30,7 @@ void f_serial_init_metrics(S_UserThread *self)
    multiplex between "listen_sd", "client_sd" and the UART
 */
 
-void f_serial_io(S_UserThread *self, int listen_sd)
+void f_serial_io(S_UserThread *self, int listen_sd, int poll_msec)
 {
   int num_fds, result, client_sd=-1 ;
   size_t amt ;
@@ -48,7 +48,7 @@ void f_serial_io(S_UserThread *self, int listen_sd)
     // setup select()'s poll duration, but sanity check it
 
     tv.tv_sec = 0 ;
-    tv.tv_usec = G_runtime->config.uart_poll_ms * 1000 ;
+    tv.tv_usec = poll_msec * 1000 ;
     if (tv.tv_usec < 1000)
       tv.tv_usec = 1000 ;                                       // minimum 1ms
     if (tv.tv_usec > DEF_MAX_THREAD_WRAPUP_MSEC * 1000 / 2)
@@ -143,7 +143,7 @@ void f_serial_io(S_UserThread *self, int listen_sd)
 
 void ft_serial(S_UserThread *self)
 {
-  if (self->num_args != 4)
+  if (self->num_args != 5)
   {
     strncpy(self->status, "Incorrect arguments", BUF_LEN_UTHREAD_STATUS) ;
     self->state = UTHREAD_STOPPED ;
@@ -154,6 +154,7 @@ void ft_serial(S_UserThread *self)
   int baud = atoi(self->in_args[1]) ;
   int rx_pin = atoi(self->in_args[2]) ;
   int tx_pin = atoi(self->in_args[3]) ;
+  int poll_msec = atoi(self->in_args[4]) ;
 
   // setup the listening socket
 
@@ -221,7 +222,7 @@ void ft_serial(S_UserThread *self)
                      UART_PIN_NO_CHANGE) != ESP_OK)     // CTS pin (ie, unused)
       strncpy(self->status, "uart_set_pin() failed", BUF_LEN_UTHREAD_STATUS) ;
     else
-      f_serial_io(self, listen_sd) ;            // serial/tcp main loop
+      f_serial_io(self, listen_sd, poll_msec) ;         // serial/tcp main loop
   }
 
   // release resources associated with the UART before releasing the lock
