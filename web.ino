@@ -261,6 +261,8 @@ void f_handle_core_metrics(int idx)
     strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
     snprintf(s, l, "ec_mqtt_publish_failed %ld\n", r->mqtt_publish_failed) ;
     strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
+    snprintf(s, l, "ec_mqtt_publish_bytes %ld\n", r->mqtt_publish_bytes) ;
+    strncat(r->metrics_buf, s, BUF_LEN_METRICS - strlen(r->metrics_buf)) ;
   }
 
   // if the camera subsystem is configured, expose its metrics

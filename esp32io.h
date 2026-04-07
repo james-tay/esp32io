@@ -297,6 +297,7 @@ struct runtime_data {
   unsigned long mqtt_connect_fails ;            // attempts which failed
   unsigned long mqtt_publish_success ;          // successful publish attempts
   unsigned long mqtt_publish_failed ;           // failed publish attempts
+  unsigned long mqtt_publish_bytes ;            // total bytes published
 
 } ; typedef struct runtime_data S_RuntimeData ;
 

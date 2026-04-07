@@ -112,6 +112,7 @@ void f_mqtt_connect(int idx)
   // results in "connect()" hanging and causing a stacktrace.
 
   G_psClient.setServer(cfg_server, port) ;
+  G_runtime->mqtt_connect_ts = esp_timer_get_time() ;
   if (G_psClient.connect(PUBSUB_CLIENT_NAME, cfg_user, cfg_pw))
   {
     if (idx >= 0)
@@ -119,9 +120,7 @@ void f_mqtt_connect(int idx)
       strncpy(G_runtime->worker[idx].result_msg, "Connected\r\n",
               BUF_LEN_WORKER_RESULT) ;
       G_runtime->worker[idx].result_code = 200 ;
-      G_runtime->pubsub_state = 1 ;
     }
-    G_runtime->mqtt_connect_ts = esp_timer_get_time() ;
     G_runtime->mqtt_connects++ ;
   }
   else
@@ -129,12 +128,40 @@ void f_mqtt_connect(int idx)
     if (idx >= 0)
     {
       snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
-               "Connection failed - %s\r\n", f_mqtt_state(G_psClient.state())) ;
+               "Connection failed - %s\r\n",
+               f_mqtt_state(G_psClient.state())) ;
       G_runtime->worker[idx].result_code = 500 ;
-      G_runtime->pubsub_state = 0 ;
     }
     G_runtime->mqtt_connect_fails++ ;
   }
+
+  // set active even if we failed, so that main "loop()" will retry
+  G_runtime->pubsub_state = 1 ;
+}
+
+/*
+   This function is called from "f_mqtt_cmd()". Our job is not just to
+   disconnect from the MQTT server, but to also set the "pubsub_state" to
+   offline.
+*/
+
+void f_mqtt_disconnect (int idx)
+{
+  if (xSemaphoreTake(G_runtime->L_pubsub,
+                     pdMS_TO_TICKS(DEF_MQTT_LOCK_WAIT_MSEC)) != pdTRUE)
+  {
+    if (idx >= 0)
+    {
+      strncpy(G_runtime->worker[idx].result_msg,
+              "Cannot acquire L_pubsub\r\n", BUF_LEN_WORKER_RESULT) ;
+      G_runtime->worker[idx].result_code = 500 ;
+    }
+    G_runtime->mqtt_lock_failed++ ;
+    return ;
+  }
+  G_psClient.disconnect() ;
+  G_runtime->pubsub_state = 0 ;
+  xSemaphoreGive(G_runtime->L_pubsub) ;
 }
 
 /*
@@ -157,9 +184,27 @@ void f_mqtt_publish(int idx, char *msg)
     return ;
   }
   if (G_psClient.publish(G_runtime->config.mqtt_topic, msg))
+  {
+    if (idx >= 0)
+    {
+      snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+               "Published %d bytes to %s\r\n",
+               strlen(msg), G_runtime->config.mqtt_topic) ;
+      G_runtime->worker[idx].result_code = 200 ;
+    }
     G_runtime->mqtt_publish_success++ ;
+    G_runtime->mqtt_publish_bytes += strlen(msg) ;
+  }
   else
+  {
+    if (idx >= 0)
+    {
+      snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+               "Could not publish to %s\r\n", G_runtime->config.mqtt_topic) ;
+      G_runtime->worker[idx].result_code = 500 ;
+    }
     G_runtime->mqtt_publish_failed++ ;
+  }
 
   xSemaphoreGive(G_runtime->L_pubsub) ;
 }
@@ -201,6 +246,7 @@ void f_mqtt_cmd(int idx)
   {
     strncpy(G_runtime->worker[idx].result_msg,
             "connect            connect to MQTT server\r\n"
+            "disconnect         disconnect from MQTT server\r\n"
             "publish <str>      publish to our default topic\r\n"
             "status             print our current MQTT status\r\n",
             BUF_LEN_WORKER_RESULT) ;
@@ -214,6 +260,9 @@ void f_mqtt_cmd(int idx)
 
   if (strcmp(key, "connect") == 0)
     f_mqtt_connect(idx) ;
+  else
+  if (strcmp(key, "disconnect") == 0)
+    f_mqtt_disconnect(idx) ;
   else
   if (strcmp(key, "publish") == 0)
     f_mqtt_publish(idx, value) ;
