@@ -1,11 +1,11 @@
-Build environment,
+[ Build environment ]
 
   esp32s3@fractal:~/esp32io$ arduino-cli version
   arduino-cli  Version: 1.2.2 Commit: c11b9dd5 Date: 2025-04-22T13:51:01Z
 
   esp32s3@fractal:~/esp32io$ arduino-cli core list
   ID          Installed Latest Name
-  esp32:esp32 3.3.5     3.3.5  esp32
+  esp32:esp32 3.3.6     3.3.6  esp32
 
   esp32s3@fractal:~/esp32io$ arduino-cli lib list
   No libraries installed.
@@ -110,4 +110,25 @@ and incomplete user thread code.
   Hash of data verified.
   Wrote 1104576 bytes (702535 compressed) at 0x00010000 in 19.2 seconds (460.6 kbit/s).
   Hash of data verified.
+
+[ Heap Memory Free ]
+
+on ESP32,
+  - 196404 bytes on initial boot, ie no code has run yet
+  - 161044 bytes after malloc'ing "G_runtime"
+  - 110532 bytes after WiFi starts up
+  -  51352 bytes after starting 1x console, 1x webserver, 4x worker
+
+On ESP32-S3,
+  - 305028 bytes on initial boot, ie no code has run yet
+  - 269668 bytes after malloc'ing "G_runtime"
+  - 210780 bytes after WiFi starts up
+  - 150696 bytes after starting 1x console, 1x webserver, 4x worker
+
+On ESP32-cam,
+  - 196324 bytes on initial boot, ie no code has run yet
+  - 195784 bytes after malloc'ing "G_runtime"
+  - 150160 bytes after WiFi starts up
+  -  92568 bytes after starting 1x console, 1x webserver, 4x worker
+  -  48428 bytes after initializing the camera subsystem
 

@@ -92,6 +92,16 @@ void f_load_config()
   if (f_load_int("/wifi_check_secs.cfg", &G_runtime->config.wifi_check_secs))
     Serial.printf("BOOT: from /wifi_check_secs.cfg -> %d.\r\n",
                   G_runtime->config.wifi_check_secs) ;
+
+  if (f_load_int("/worker_threads.cfg", &G_runtime->config.worker_threads))
+  {
+    if (G_runtime->config.worker_threads < 1)
+      G_runtime->config.worker_threads = 1 ;
+    if (G_runtime->config.worker_threads > DEF_MAX_WORKER_THREADS)
+      G_runtime->config.worker_threads = DEF_MAX_WORKER_THREADS ;
+    Serial.printf("BOOT: from /worker_threads.cfg -> %d.\r\n",
+                  G_runtime->config.worker_threads) ;
+  }
 }
 
 /*

@@ -238,9 +238,21 @@ void f_version_cmd(int idx)
   snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
            "Model %s (revision %d), %d cores.\r\n"
            "Git commit %s, built %s.\r\n"
-           "G_runtime is %d bytes.\r\n",
+           "G_runtime is %d bytes.\r\n"
+           "Free heap bytes:\r\n"
+           "  %d initial program load\r\n"
+           "  %d before wifi init\r\n"
+           "  %d after wifi init\r\n"
+           "  %d setup() complete\r\n"
+           "  %d current free\r\n",
            ESP.getChipModel(), chip_info.revision, chip_info.cores,
-           BUILD_COMMIT, BUILD_TIME, sizeof(S_RuntimeData)) ;
+           BUILD_COMMIT, BUILD_TIME,
+           sizeof(S_RuntimeData),
+           G_runtime->initial_heap_bytes,
+           G_runtime->heap_before_wifi,
+           G_runtime->heap_after_wifi,
+           G_runtime->heap_setup_complete,
+           xPortGetFreeHeapSize()) ;
   G_runtime->worker[idx].result_code = 200 ;
 }
 

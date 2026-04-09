@@ -287,7 +287,7 @@ void f_handle_core_metrics(int idx)
 
   // worker threads, iterate over them
 
-  for (int idx=0 ; idx < DEF_WORKER_THREADS ; idx++)
+  for (int idx=0 ; idx < r->config.worker_threads ; idx++)
   {
     S_WorkerData *w = &G_runtime->worker[idx] ;                 // just a macro
     snprintf(s, l, "ec_worker_cmds_executed{id=\"%s\"} %lu\n",

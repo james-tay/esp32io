@@ -29,7 +29,7 @@
 #define DEF_WEBSERVER_EVENT_PORT 65501  // UDP mesg indicating task completion
 #define DEF_WEBSERVER_MAX_CLIENTS 4     // maximum concurrent HTTP clients
 #define DEF_WEBSERVER_MAX_IDLE_MS 8000  // disconnect idle http clients
-#define DEF_WORKER_THREADS 4            // threads which execute commands
+#define DEF_MAX_WORKER_THREADS 4        // these are going to eat memory
 #define DEF_WORKER_FIND_MAX_MS 500      // max delay between finding workers
 #define DEF_WIFI_BEGIN_WAIT_SECS 30     // how long to wait after WiFi.begin()
 #define DEF_WIFI_CHK_INT_SECS 30        // how often to check wifi status
@@ -214,6 +214,7 @@ struct config_data {
   // misc settings
 
   int init_delay_secs ;                 // secs before running "/init.thread"
+  int worker_threads ;                  // used only once in "setup()"
   int debug ;                           // 0=none, 1=debug
 
 } ; typedef struct config_data S_ConfigData ;
@@ -231,6 +232,10 @@ struct runtime_data {
   int fs_online ;                       // what SPIFFS.begin() returned
   int request_reload ;                  // 0=normal, 1=reload
   int pubsub_state ;                    // 0=unconfigured/offline 1=online
+  int initial_heap_bytes ;              // free heap bytes at initial boot
+  int heap_before_wifi ;                // free heap bytes before Wifi init
+  int heap_after_wifi ;                 // free heap bytes after Wifi init
+  int heap_setup_complete ;             // free heatp bytes after "setup()"
   char cmd_buf[BUF_LEN_LINE] ;          // used in main "loop()"
   long long ts_last_blink ;             // timestamp of last LED blink
   long long ts_last_wifi_check ;        // timestamp of last wifi status check
@@ -256,7 +261,7 @@ struct runtime_data {
 
   // worker threads
 
-  S_WorkerData worker[DEF_WORKER_THREADS] ;
+  S_WorkerData worker[DEF_MAX_WORKER_THREADS] ;
   int next_worker ;
 
   // user defined task threads

@@ -9,7 +9,7 @@
    is to manage,
      - listen for commands on either serial port or the webserver
      - handle up to DEF_WEBSERVER_MAX_CLIENTS concurrent HTTP clients
-     - execute commands across DEF_WORKER_THREADS worker threads
+     - execute commands across DEF_MAX_WORKER_THREADS worker threads
 
    INTERNAL THREADS
 
@@ -222,7 +222,7 @@ int f_get_next_worker()
     xSemaphoreTake(G_runtime->L_worker, portMAX_DELAY) ;
     int tid = G_runtime->next_worker ;
     G_runtime->next_worker++ ;
-    if (G_runtime->next_worker == DEF_WORKER_THREADS)
+    if (G_runtime->next_worker == G_runtime->config.worker_threads)
       G_runtime->next_worker = 0 ;
 
     // see if this worker is available, otherwise try again after a delay
@@ -371,6 +371,7 @@ void f_serial_console_thread(void *param)
 
 void setup()
 {
+  size_t initial_heap_bytes = xPortGetFreeHeapSize() ;
   delay (1000) ;
 
   // initalize our runtime data structures
@@ -385,10 +386,14 @@ void setup()
   G_runtime->config.wifi_check_secs = DEF_WIFI_CHK_INT_SECS ;
   G_runtime->config.mqtt_check_secs = DEF_MQTT_CHECK_INT_SECS ;
   G_runtime->config.init_delay_secs = DEF_INIT_THREAD_START_SECS ;
+  G_runtime->config.worker_threads = DEF_MAX_WORKER_THREADS ;
+  G_runtime->initial_heap_bytes = initial_heap_bytes ;
 
   // print out some info to show that we're booting up
 
+  G_runtime->heap_before_wifi = xPortGetFreeHeapSize() ;
   WiFi.mode(WIFI_STA) ;
+  G_runtime->heap_after_wifi = xPortGetFreeHeapSize() ;
   Serial.begin(DEF_SERIAL_BAUD) ;
   Serial.setTimeout(1000) ;
   Serial.printf("\r\nBOOT: Running esp32io git commit %s, built %s.\r\n",
@@ -427,7 +432,7 @@ void setup()
 
   // create worker threads
 
-  for (int i=0 ; i < DEF_WORKER_THREADS ; i++)
+  for (int i=0 ; i < G_runtime->config.worker_threads ; i++)
   {
     G_runtime->worker[i].id = i ;
     snprintf(G_runtime->worker[i].name, BUF_LEN_WORKER_NAME, "worker%d", i) ;
@@ -467,6 +472,8 @@ void setup()
   neopixelWrite(DEF_RGBLED_PIN, 0, 0, 255) ;
   delay (333) ;
   neopixelWrite(DEF_RGBLED_PIN, 0, 0, 0) ;
+
+  G_runtime->heap_setup_complete = xPortGetFreeHeapSize() ;
 }
 
 void loop()

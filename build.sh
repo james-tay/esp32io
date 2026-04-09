@@ -34,7 +34,10 @@
 #
 #     $ ./build.sh stack 0x4008ae92:0x3ffe1ac0 0x40179fea:0x3ffe1ad0 ...
 
-ESPTOOL="$HOME/.arduino15/packages/esp32/tools/esptool_py/5.1.0/esptool"
+SDK_HOME="$HOME/.arduino15/packages/esp32/tools"
+ESPTOOL="$SDK_HOME/esptool_py/5.1.0/esptool"
+ADDR2LINE="$SDK_HOME/esp-x32/2511/bin/xtensa-esp32s3-elf-addr2line"
+
 BOARD="esp32:esp32"
 BAUD="115200"
 
@@ -119,7 +122,7 @@ case $1 in
 
 'stack')
   shift 2
-  xtensa-esp32s3-elf-addr2line -pfiaC -e $BUILD_PATH/esp32io.ino.elf $@
+  $ADDR2LINE -pfiaC -e $BUILD_PATH/esp32io.ino.elf $@
   ;;
 
 *)
