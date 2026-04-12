@@ -11,14 +11,23 @@ void ft_aread(S_UserThread *self)
 /*
    This function is called from "f_user_thread_lifecycle()". Our job is to
    poll a GPIO pin and perform a digitalRead. We not only expose metrics, but
-   also emit an event if our MQTT subsystem is online.
+   also emit an event if our MQTT subsystem is online. Consider the following
+   usage (ie, "/button1.thread")
+
+     ft_dread:0,50,1,-1,1,200
+
+   In the above example, we have a button connecting GPIO1 to ground. We'll
+   poll every 50 ms, applying the internal pull-up resistor to maintain a logic
+   high for an open circuit. Since this is a passive circuit, we have no power
+   pin (ie, "-1"). To suppress false triggering, the button must be held down
+   for at least 200ms (ie, 4x polling cycles).
 */
 
 void ft_dread(S_UserThread *self)
 {
-  static thread_local int poll_ms=0, in_pin=-1 ;
+  static thread_local int poll_ms=0, in_pin=-1, prev_state=0, ori_state=0 ;
   static thread_local int pwr_pin=-1, pullup=0, thres_ms=0 ;
-  static long long next_run ;
+  static long long next_run, state_change_time ;
 
   // on the first loop, parse our config and set the static variables above
 
@@ -40,9 +49,68 @@ void ft_dread(S_UserThread *self)
 
     next_run = esp_timer_get_time() ;
     self->state = UTHREAD_RUNNING ;
+
+    if (poll_ms > DEF_MAX_THREAD_WRAPUP_MSEC / 2) // limit max poll timing
+      poll_ms = DEF_MAX_THREAD_WRAPUP_MSEC / 2 ;
+
+    if (pullup)
+      pinMode(in_pin, INPUT_PULLUP) ;   // use built-in pull up resistor
+    else
+      pinMode(in_pin, INPUT) ;          // floating input
+
+    if (pwr_pin >= 0)                   // if user specified a power pin
+    {
+      pinMode(pwr_pin, OUTPUT) ;
+      digitalWrite(pwr_pin, HIGH) ;
+    }
   }
 
+  // on 2nd loop, initialize "prev_state" because we want "in_pin" to settle
 
+  if (self->loop == 1)
+  {
+    prev_state = digitalRead(in_pin) ;
+    ori_state = prev_state ;
+    state_change_time = esp_timer_get_time() ;
+  }
+  else
+  {
+    // check if our state changed. The following conditions may occur,
+    // 1. no state change, ie, "cur_state" matches "prev_state". Do nothing.
+    // 2. "cur_state" changed, but this may be a transient
+    //   a) if we changed back to "ori_state" then this was a transient.
+    //   b) if we're not "ori_state", note down "state_change_time".
+    // 3. we've been in a new state for some time,
+    //   a) emit an event
+    //   b) update "ori_state"
+
+    int cur_state = digitalRead(in_pin) ;
+
+    if (cur_state != prev_state)                        // condition 2.
+    {
+      if (cur_state == ori_state)                       // found a transient
+        state_change_time = 0 ;
+      else
+        state_change_time = esp_timer_get_time() ;      // note change time
+      prev_state = cur_state ;
+    }
+
+    if (cur_state != ori_state)                         // condition 3.
+    {
+      long long now = esp_timer_get_time() ;
+      long long dur = now - state_change_time ;
+      if (dur > (thres_ms * 1000))
+        ori_state = cur_state ;
+    }
+  }
+
+  // if we've been told to shutdown, turn off "pwr_pin" if user specified
+
+  if ((self->state == UTHREAD_WRAPUP) && (pwr_pin >= 0))
+  {
+    digitalWrite(pwr_pin, LOW) ;
+    return ;                            // don't bother taking a nap
+  }
 
   // figure out how long to pause before the next poll
 
