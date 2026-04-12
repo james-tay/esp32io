@@ -21,12 +21,16 @@ void ft_aread(S_UserThread *self)
    high for an open circuit. Since this is a passive circuit, we have no power
    pin (ie, "-1"). To suppress false triggering, the button must be held down
    for at least 200ms (ie, 4x polling cycles).
+
+   Note that "ori_state" is initialized once. If initialized low, then
+   "triggers" are counted when "in_pin" goes high. If initialized high, then
+   "triggers" are counted when "in_pin" goes low.
 */
 
 void ft_dread(S_UserThread *self)
 {
-  static thread_local int poll_ms=0, in_pin=-1, prev_state=0, ori_state=0 ;
-  static thread_local int pwr_pin=-1, pullup=0, thres_ms=0 ;
+  static thread_local int poll_ms=0, in_pin=-1, prev_state=0, ref_state=0 ;
+  static thread_local int pwr_pin=-1, pullup=0, thres_ms=0, ori_state=0 ;
   static long long next_run, state_change_time ;
 
   // on the first loop, parse our config and set the static variables above
@@ -70,37 +74,66 @@ void ft_dread(S_UserThread *self)
   if (self->loop == 1)
   {
     prev_state = digitalRead(in_pin) ;
-    ori_state = prev_state ;
+    ref_state = prev_state ;
+    ori_state = prev_state ;                    // "ori_state" is set ONCE
     state_change_time = esp_timer_get_time() ;
+
+    // configure the metrics we'll expose
+
+    self->result[0].result_type = UTHREAD_RESULT_INT ;
+    self->result[0].l_name[0] = "type" ;
+    self->result[0].l_data[0] = "state" ;
+    self->result[1].result_type = UTHREAD_RESULT_LONGLONG ;
+    self->result[1].l_name[0] = "type" ;
+    self->result[1].l_data[0] = "transients" ;
+    self->result[2].result_type = UTHREAD_RESULT_LONGLONG ;
+    self->result[2].l_name[0] = "type" ;
+    self->result[2].l_data[0] = "triggers" ;
+
+    self->result[0].i_value = ref_state ;
+    if (G_runtime->config.debug)
+      Serial.printf("DEBUG: ft_dread() ori_state:%d\r\n.", ori_state) ;
   }
   else
   {
     // check if our state changed. The following conditions may occur,
     // 1. no state change, ie, "cur_state" matches "prev_state". Do nothing.
     // 2. "cur_state" changed, but this may be a transient
-    //   a) if we changed back to "ori_state" then this was a transient.
-    //   b) if we're not "ori_state", note down "state_change_time".
+    //   a) if we changed back to "ref_state" then this was a transient.
+    //   b) if we're not "ref_state", note down "state_change_time".
     // 3. we've been in a new state for some time,
     //   a) emit an event
-    //   b) update "ori_state"
+    //   b) update "ref_state"
 
     int cur_state = digitalRead(in_pin) ;
 
     if (cur_state != prev_state)                        // condition 2.
     {
-      if (cur_state == ori_state)                       // found a transient
+      if (cur_state == ref_state)                       // found a transient
+      {
         state_change_time = 0 ;
+        self->result[1].ll_value++ ;                    // "transients" metric
+      }
       else
         state_change_time = esp_timer_get_time() ;      // note change time
       prev_state = cur_state ;
     }
 
-    if (cur_state != ori_state)                         // condition 3.
+    if (cur_state != ref_state)
     {
       long long now = esp_timer_get_time() ;
       long long dur = now - state_change_time ;
-      if (dur > (thres_ms * 1000))
-        ori_state = cur_state ;
+      if (dur > (thres_ms * 1000))                      // condition 3.
+      {
+        if (G_runtime->config.debug)
+          Serial.printf("DEBUG: ft_dread() state %d->%d\r\n",
+                        ref_state, cur_state) ;
+
+        ref_state = cur_state ;
+        self->result[0].i_value = cur_state ;           // "state" metric
+        if (cur_state != ori_state)
+          self->result[2].ll_value++ ;                  // "triggers" metric
+      }
     }
   }
 
