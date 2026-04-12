@@ -1,9 +1,66 @@
 /*
-   This is the user tasks thread. Our job is to read commands from a file and
-   execute them by dispatching each command to a worker thread. This function
-   is expected to only run once. Once all commands in the specified file are
-   complete, our job is done. Apart from the standard commands, this function
-   internally implements,
+   This function is called from "f_user_thread_lifecycle()".
+*/
+
+void ft_aread(S_UserThread *self)
+{
+
+
+}
+
+/*
+   This function is called from "f_user_thread_lifecycle()". Our job is to
+   poll a GPIO pin and perform a digitalRead. We not only expose metrics, but
+   also emit an event if our MQTT subsystem is online.
+*/
+
+void ft_dread(S_UserThread *self)
+{
+  static thread_local int poll_ms=0, in_pin=-1 ;
+  static thread_local int pwr_pin=-1, pullup=0, thres_ms=0 ;
+  static long long next_run ;
+
+  // on the first loop, parse our config and set the static variables above
+
+  if (self->loop == 0)
+  {
+    if ((self->num_args < 4) || (self->num_args > 5))
+    {
+      strncpy(self->status, "Incorrect arguments", BUF_LEN_UTHREAD_STATUS) ;
+      self->state = UTHREAD_STOPPED ;
+      return ;
+    }
+
+    poll_ms = atoi(self->in_args[0]) ;  // how often we'll poll "in_pin"
+    in_pin = atoi(self->in_args[1]) ;   // the GPIO pin we digitalRead() on
+    pwr_pin = atoi(self->in_args[2]) ;  // the pin powering the peripheral
+    pullup = atoi(self->in_args[3]) ;   // whether to apply a pullup voltage
+    if (self->in_args[4] != NULL)
+      thres_ms = atoi(self->in_args[4]) ; // used to suppress false triggering
+
+    next_run = esp_timer_get_time() ;
+    self->state = UTHREAD_RUNNING ;
+  }
+
+
+
+  // figure out how long to pause before the next poll
+
+  next_run = next_run + (poll_ms * 1000) ;
+  long nap_ms = (next_run - esp_timer_get_time()) / 1000 ;
+  if (nap_ms < 1)
+    nap_ms = 1 ;
+  snprintf(self->status, BUF_LEN_UTHREAD_STATUS, "nap %ld ms", nap_ms) ;
+  delay(nap_ms) ;
+}
+
+/*
+   This function is called from "f_user_thread_lifecycle()". This is the user
+   tasks thread. Our job is to read commands from a file and execute them by
+   dispatching each command to a worker thread. This function is expected to
+   only run once. Once all commands in the specified file are complete, our
+   job is done. Apart from the standard commands, this function internally
+   implements,
      delay_ms <msecs>           pause execution for specified time
 */
 
