@@ -166,7 +166,11 @@ void f_mqtt_disconnect (int idx)
 
 /*
    This function is called from "f_mqtt_cmd()". Our job is to publish "msg"
-   to our currently configured "mqtt_topic".
+   to our currently configured "mqtt_topic". "idx" typically points to a
+   worker thread, but if set to "-1", then we treat it as an anonymous caller.
+   "msg" typically should be in a prometheus metric syntax, ie,
+
+     metric_name{label="<value>",...} <value>
 */
 
 void f_mqtt_publish(int idx, char *msg)

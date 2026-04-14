@@ -188,6 +188,36 @@
    this context, the worker thread's "caller" is set to -255 (ie, anonymous).
    Thus, the user can provide the "/init.thread" file, which will be started
    automatically after boot.
+
+   METRICS GENERATION
+
+   For the most part, all built-in performance metrics (eg, "ec_uptime_secs")
+   are handled and rendered internally. Recall that the format of these exposed
+   metrics is,
+
+     metric_name{label1="value1",label2="value2",...} <int|float result>
+
+   When it comes to user task threads, which have task specific metrics to
+   expose to prometheus, by default their metrics and labels look like this,
+
+     <thread_name>{<label1>="<data1>",...} <result>
+
+   If the "/<thread_name>.labels" file exists, then it must contain the line,
+
+     <metric_name>,<u_label1>="<u_data1>"[,<u_labelN>="<u_dataN>",...]
+
+   In which case, the final metric exposed to prometheus becomes,
+
+     <metric_name>{<u_label1>="<u_data1>",...,<label1>="<data1>",...} <result>
+
+   Incidentally, when a user task thread emits an MQTT event (eg, button press,
+   threshold crossed, etc), the MQTT message published follows the same above
+   format (ie, a prometheus metric line).
+
+   To render metrics, we begin by calling "f_read_single_line()" to attempt
+   to load the "/<thread_name>.labels" file into a static buffer. After this,
+   for each metric of interest, we call "f_render_metric()", which writes
+   the metric name and labels (ie, no "<result>") to another static buffer.
 */
 
 // my custom header

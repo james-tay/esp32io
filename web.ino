@@ -65,6 +65,61 @@ void f_url_decode(char *src)
 }
 
 /*
+   This function is typically called from "f_handle_utask_metrics()". When
+   a user task thread with "thread_name" wants to render a metric line, the
+   metric name and labels are generated from both the "label_cfg" (if set),
+   and the supplied "S_ThreadResult" structure. This function returns the
+   generated metric line in "buf" which is expected to be "buf_size" long.
+*/
+
+void f_render_metric(char *label_cfg, char *thread_name, S_ThreadResult *res,
+                     char *buf, int buf_size)
+{
+  char *static_labels=NULL ;
+  char metric_name[BUF_LEN_LINE], all_labels[BUF_LEN_LINE], s[BUF_LEN_LINE] ;
+
+  all_labels[0] = 0 ;
+  strcpy(metric_name, thread_name) ;                    // default metric_name
+  if ((label_cfg != NULL) && (strlen(label_cfg) > 1))
+  {
+    // recall that "label_cfg" is in the format,
+    //   metric_name,<label1>="<data1>"[,<labelN>="<dataN>",...]
+
+    char *p = strstr(label_cfg, ",") ;                  // identify metric_name
+    if (p)
+    {
+      int len = p - label_cfg ;
+      strncpy(metric_name, label_cfg, len) ;            // custom metric_name
+      metric_name[len] = 0 ;
+      strncpy(all_labels, p+1, BUF_LEN_LINE) ;          // custom labels
+    }
+  }
+
+  // now append labels from "res" to "all_labels"
+
+  int remainder = BUF_LEN_LINE - strlen(all_labels) - 1 ;
+  for (int idx=0 ; res->l_name[idx] != NULL ; idx++)
+  {
+    if (strlen(all_labels) > 0)
+    {
+      strncat(all_labels, ",", remainder) ;
+      remainder-- ;
+    }
+    snprintf(s, BUF_LEN_LINE, "%s=\"%s\"",
+             res->l_name[idx], res->l_data[idx]) ;
+    strncat(all_labels, s, remainder) ;
+    remainder = remainder - strlen(s) ;
+  }
+
+  // finally, render the complete metric and labels into user's "buf".
+
+  if (strlen(all_labels) > 1)
+    snprintf(buf, buf_size, "%s{%s}", metric_name, all_labels) ;
+  else
+    strncpy(buf, metric_name, buf_size) ;               // no "label_cfg"
+}
+
+/*
    This function is called from "f_handle_webrequest()" when it has been
    determined that the webclient wants to scrape metrics. This function
    iterates through active user task threads and renders metrics for all
