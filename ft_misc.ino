@@ -137,13 +137,15 @@ void ft_dread(S_UserThread *self)
         if (G_runtime->pubsub_state)
         {
           char metric[BUF_LEN_LINE] ;
-          char filename[BUF_LEN_LINE], label_cfg[BUF_LEN_LINE] ;
+          char tmp_buf[BUF_LEN_LINE], label_cfg[BUF_LEN_LINE] ;
 
-          snprintf(filename, BUF_LEN_LINE, "/%s.labels", self->name) ;
-          if (f_read_single_line(filename, label_cfg, BUF_LEN_LINE) < 1)
+          snprintf(tmp_buf, BUF_LEN_LINE, "/%s.labels", self->name) ;
+          if (f_read_single_line(tmp_buf, label_cfg, BUF_LEN_LINE) < 1)
             label_cfg[0] = 0 ;
           f_render_metric(label_cfg, self->name, &self->result[0],
-                          metric, BUF_LEN_LINE) ;
+                          tmp_buf, BUF_LEN_LINE) ;
+          snprintf(metric, BUF_LEN_LINE, "%s %d", tmp_buf, cur_state) ;
+
           if (G_runtime->config.debug)
             Serial.printf("DEBUG: ft_dread() publish:%s\r\n", metric) ;
         }

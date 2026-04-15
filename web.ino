@@ -128,11 +128,6 @@ void f_render_metric(char *label_cfg, char *thread_name, S_ThreadResult *res,
 
 void f_handle_utask_metrics(int idx)
 {
-  int remainder ;
-  char s[BUF_LEN_LINE], *p ;            // general purpose
-  char label_cfg[BUF_LEN_LINE] ;        // for "/<name>.labels" file contents
-  char label_set[BUF_LEN_LINE] ;        // collection of all metric labels
-
   G_runtime->metrics_buf[0] = 0 ;       // accumulate small strings here
 
   // iterate through all user task threads which are running
@@ -140,78 +135,45 @@ void f_handle_utask_metrics(int idx)
   for (int slot=0 ; slot < DEF_MAX_USER_THREADS ; slot++)
     if (G_runtime->utask[slot].state == UTHREAD_RUNNING)
     {
-      // decide "metric" and "static_labels" we'll use for this user thread
+      char metric[BUF_LEN_LINE] ;
+      char tmp_buf[BUF_LEN_LINE], label_cfg[BUF_LEN_LINE] ;
 
-      char *metric=G_runtime->utask[slot].name, *static_labels=NULL ;
-      snprintf(s, BUF_LEN_LINE, "/%s.labels", G_runtime->utask[slot].name) ;
-      if (f_read_single_line(s, label_cfg, BUF_LEN_LINE) > 0)
-      {
-        metric = label_cfg ;
-        p = strstr(label_cfg, ",") ;
-        if (p)                          // static labels are present
-        {
-          *p = 0 ;
-          static_labels = p + 1 ;
-        }
-      }
+      snprintf(tmp_buf, BUF_LEN_LINE, "/%s.labels",
+               G_runtime->utask[slot].name) ;
+      if (f_read_single_line(tmp_buf, label_cfg, BUF_LEN_LINE) < 1)
+        label_cfg[0] = 0 ;
 
-      // iterate through all exposed results
+      // iterate through all results exposed by this user task thread
 
       for (int r_idx=0 ; r_idx < DEF_MAX_THREAD_RESULTS ; r_idx++)
       {
         S_ThreadResult *r_ptr = &G_runtime->utask[slot].result[r_idx] ;
         if (r_ptr->result_type != UTHREAD_RESULT_NONE)
         {
-          // consolidate all user task thread defined labels in this result,
-          // accumulate them in "label_set", track it with "remainder".
-
-          memset(label_set, 0, BUF_LEN_LINE) ;
-          remainder = BUF_LEN_LINE - 1 ;
-          if (static_labels)
-          {
-            strncpy(label_set, static_labels, BUF_LEN_LINE-1) ;
-            remainder = remainder - strlen(static_labels) ;
-          }
-
-          for (int l_idx=0 ; l_idx < DEF_MAX_THREAD_LABELS ; l_idx++)
-            if ((r_ptr->l_name[l_idx]) && (r_ptr->l_data[l_idx]))
-            {
-              snprintf(s, BUF_LEN_LINE, "%s=\"%s\"",
-                       r_ptr->l_name[l_idx], r_ptr->l_data[l_idx]) ;
-              if (strlen(label_set) > 0)
-              {
-                strncat(label_set, ",", remainder) ;
-                remainder-- ;
-              }
-              strncat(label_set, s, remainder) ;
-              remainder = BUF_LEN_LINE - strlen(label_set) - 1 ;
-            }
-
-          // at this point, we can assemble the whole metric line into "s",
-          // depending on the "result_type".
-
-          s[0] = 0 ;
+          S_ThreadResult *r_ptr = &G_runtime->utask[slot].result[r_idx] ;
+          f_render_metric(label_cfg, G_runtime->utask[slot].name,
+                          r_ptr, tmp_buf, BUF_LEN_LINE) ;
           switch (r_ptr->result_type)
           {
             case UTHREAD_RESULT_INT:
-              snprintf(s, BUF_LEN_LINE, "%s{%s} %d\n",
-                       metric, label_set, r_ptr->i_value) ;
+              snprintf(metric, BUF_LEN_LINE, "%s %d\n",
+                       tmp_buf, r_ptr->i_value) ;
               break ;
             case UTHREAD_RESULT_FLOAT:
-              snprintf(s, BUF_LEN_LINE, "%s{%s} %f\n",
-                       metric, label_set, r_ptr->f_value) ;
+              snprintf(metric, BUF_LEN_LINE, "%s %f\n",
+                       tmp_buf, r_ptr->f_value) ;
               break ;
             case UTHREAD_RESULT_LONGLONG:
-              snprintf(s, BUF_LEN_LINE, "%s{%s} %lld\n",
-                       metric, label_set, r_ptr->ll_value) ;
+              snprintf(metric, BUF_LEN_LINE, "%s %lld\n",
+                       tmp_buf, r_ptr->ll_value) ;
               break ;
           }
 
           // accumulate metrics in "metrics_buf" instead of write()'ing small
           // buffers to the web client.
 
-          remainder = BUF_LEN_METRICS - strlen(G_runtime->metrics_buf) - 1 ;
-          strncat(G_runtime->metrics_buf, s, remainder) ;
+          int amt = BUF_LEN_METRICS - strlen(G_runtime->metrics_buf) - 1 ;
+          strncat(G_runtime->metrics_buf, metric, amt) ;
 
         } // ... loop thru all results which are not UTHREAD_RESULT_NONE
       } // ... loop thru all exposed results in this user task thread
