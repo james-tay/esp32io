@@ -1,11 +1,63 @@
 /*
-   This function is called from "f_user_thread_lifecycle()".
+   This function is called from "f_user_thread_lifecycle()". Our job is to
+   poll an A2D input pin at the specified frequency "poll_ms". If a power pin
+   is specified (ie, not "-1"), then it is set HIGH for the lifecycle of this
+   user task thread. If the analog value crosses the "hi_thres" or "lo_thres"
+   values, we'll publish an MQTT event.
 */
 
 void ft_aread(S_UserThread *self)
 {
+  static thread_local int poll_ms=0, in_pin=-1, pwr_pin=-1 ;
+  static thread_local int lo_thres=-1, hi_thres=-1 ;
+  static long long next_run ;
+
+  // on the first loop, parse our config and set the static variables above
+
+  if (self->loop == 0)
+  {
+    if (self->num_args < 3)
+    {
+      strncpy(self->status, "Incorrect arguments", BUF_LEN_UTHREAD_STATUS) ;
+      self->state = UTHREAD_STOPPED ;
+      return ;
+    }
+
+    poll_ms = atoi(self->in_args[0]) ;
+    in_pin = atoi(self->in_args[1]) ;
+    pwr_pin = atoi(self->in_args[2]) ;
+    if (self->num_args > 3)
+      lo_thres = atoi(self->in_args[3]) ;
+    if (self->num_args > 4)
+      hi_thres = atoi(self->in_args[4]) ;
+
+    next_run = esp_timer_get_time() ;
+    self->state = UTHREAD_RUNNING ;
+
+    if (poll_ms > DEF_MAX_THREAD_WRAPUP_MSEC / 2)       // limit max poll time
+      poll_ms = DEF_MAX_THREAD_WRAPUP_MSEC / 2 ;
+    if (poll_ms < 1)
+      poll_ms = 1 ;                                     // limit min poll time
+
+    if (pwr_pin >= 0)                   // if user specified a power pin
+    {
+      pinMode(pwr_pin, OUTPUT) ;
+      digitalWrite(pwr_pin, HIGH) ;
+    }
+  }
 
 
+
+
+
+
+  // figure out how long to pause before the next poll
+
+  next_run = next_run + (poll_ms * 1000) ;
+  long nap_ms = (next_run - esp_timer_get_time()) / 1000 ;
+  if (nap_ms < 1)
+    nap_ms = 1 ;
+  snprintf(self->status, BUF_LEN_UTHREAD_STATUS, "nap %ld ms", nap_ms) ;
 }
 
 /*
@@ -54,8 +106,10 @@ void ft_dread(S_UserThread *self)
     next_run = esp_timer_get_time() ;
     self->state = UTHREAD_RUNNING ;
 
-    if (poll_ms > DEF_MAX_THREAD_WRAPUP_MSEC / 2) // limit max poll timing
+    if (poll_ms > DEF_MAX_THREAD_WRAPUP_MSEC / 2)       // limit max poll time
       poll_ms = DEF_MAX_THREAD_WRAPUP_MSEC / 2 ;
+    if (poll_ms < 1)
+      poll_ms = 1 ;                                     // limit min poll time
 
     if (pullup)
       pinMode(in_pin, INPUT_PULLUP) ;   // use built-in pull up resistor

@@ -131,16 +131,13 @@ void ft_dht22(S_UserThread *self)
   int pwrPin = atoi(self->in_args[1]) ;
   int intervalSecs = atoi(self->in_args[2]) ;
 
-  if (self->loop == 0)                  // setup metrics we'll expose
+  if (self->loop == 0) // setup metrics we'll expose AFTER successful polling
   {
     self->state = UTHREAD_RUNNING ;
-    self->result[0].result_type = UTHREAD_RESULT_FLOAT ;        // temperature
     self->result[0].l_name[0] = "measurement" ;
     self->result[0].l_data[0] = "temperature" ;
-    self->result[1].result_type = UTHREAD_RESULT_FLOAT ;        // humidity
     self->result[1].l_name[0] = "measurement" ;
     self->result[1].l_data[0] = "humidity" ;
-    self->result[2].result_type = UTHREAD_RESULT_INT ;          // abnormal
     self->result[2].l_name[0] = "readings" ;
     self->result[2].l_data[0] = "abnormal" ;
     ts_next_run = esp_timer_get_time() ;
