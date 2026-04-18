@@ -137,6 +137,14 @@ void f_fs_partinfo(int idx)
 
 void f_fs_read(int idx, char *filename)
 {
+  if ((filename == NULL) || (strlen(filename) < 1))
+  {
+    strncpy(G_runtime->worker[idx].result_msg, "No filename specified.\r\n",
+            BUF_LEN_WORKER_RESULT) ;
+    G_runtime->worker[idx].result_code = 500 ;
+    return ;
+  }
+
   File f = SPIFFS.open(filename, "r") ;
   if (f.size() < 1)
   {

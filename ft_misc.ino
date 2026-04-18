@@ -145,9 +145,7 @@ void ft_dread(S_UserThread *self)
           f_render_metric(label_cfg, self->name, &self->result[0],
                           tmp_buf, BUF_LEN_LINE) ;
           snprintf(metric, BUF_LEN_LINE, "%s %d", tmp_buf, cur_state) ;
-
-          if (G_runtime->config.debug)
-            Serial.printf("DEBUG: ft_dread() publish:%s\r\n", metric) ;
+          f_mqtt_publish(-1, metric) ;
         }
       }
     }

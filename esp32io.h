@@ -43,10 +43,10 @@
 
 // stack sizes for various threads
 
-#define DEF_STACKSIZE_WORKER 8192       // worker threads
+#define DEF_STACKSIZE_WORKER 6144       // worker threads
 #define DEF_STACKSIZE_WEBSERVER 4096    // webserver thread
 #define DEF_STACKSIZE_CONSOLE 3072      // serial console thread
-#define DEF_STACKSIZE_UTHREAD 8192      // user task thread
+#define DEF_STACKSIZE_UTHREAD 6144      // user task thread
 
 // user thread limits
 

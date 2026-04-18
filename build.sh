@@ -120,13 +120,25 @@ case $1 in
   $ESPTOOL --chip $CHIP --port $SERIAL_PORT erase-flash
   ;;
 
+'build-all')
+  CHIP="esp32" $0 compile
+  CHIP="esp32s3" $0 compile
+  CHIP="esp32cam" $0 compile
+  ;;
+
 'stack')
   shift 2
   $ADDR2LINE -pfiaC -e $BUILD_PATH/esp32io.ino.elf $@
   ;;
 
 *)
-  echo "Usage: $0 { compile | upload | connect | erase | stack <stacktrace> }"
+  echo "Usage:"
+  echo "  export CHIP={ esp32 | esp32s3 | esp32cam }"
+  echo "  export SERIAL_PORT=/dev/..."
+  echo "  $0 { compile | upload | connect | erase | stack <stacktrace> }"
+  echo "or"
+  echo "  export CHIP=esp32"
+  echo "  $0 build-all"
   ;;
 esac
 

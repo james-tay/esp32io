@@ -198,6 +198,8 @@ void f_mqtt_publish(int idx, char *msg)
     }
     G_runtime->mqtt_publish_success++ ;
     G_runtime->mqtt_publish_bytes += strlen(msg) ;
+    if (G_runtime->config.debug)
+      Serial.printf("DEBUG: f_mqtt_publish() msg:%s\r\n", msg) ;
   }
   else
   {
