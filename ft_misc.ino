@@ -4,12 +4,22 @@
    is specified (ie, not "-1"), then it is set HIGH for the lifecycle of this
    user task thread. If the analog value crosses the "hi_thres" or "lo_thres"
    values, we'll publish an MQTT event.
+
+   IMPORTANT - when both a "lo_thres" and "hi_thres" are specified, then an
+   MQTT event is published only if there is a "state change". For example,
+   if we begin in a "lo" state and the value drifts upward, then an event is
+   generated when we cross "hi_thres". If the sensor then drifts down, then an
+   event is generated when we cross "lo_thres".
 */
 
 void ft_aread(S_UserThread *self)
 {
+  #define A_STATE_INIT 0        // boot up state, if we're between lo & hi
+  #define A_STATE_LO 1          // value has dipped below "lo_thres"
+  #define A_STATE_HI 2          // value has climbed above "hi_thres"
+
   static thread_local int poll_ms=0, in_pin=-1, pwr_pin=-1 ;
-  static thread_local int lo_thres=-1, hi_thres=-1, prev_value=-1 ;
+  static thread_local int lo_thres=-1, hi_thres=-1 ;
   static long long next_run ;
 
   // on the first loop, parse our config and set the static variables above
@@ -46,7 +56,7 @@ void ft_aread(S_UserThread *self)
     }
   }
 
-  // on 2nd loop, initialize "prev_state" because we want "in_pin" to settle
+  // on 2nd loop, read our first value because we want "in_pin" to settle
 
   if (self->loop == 1)
   {
@@ -55,6 +65,11 @@ void ft_aread(S_UserThread *self)
     self->result[0].l_data[0] = "value" ;
     self->result[0].i_value = analogRead(in_pin) ;
     self->result[0].result_type = UTHREAD_RESULT_INT ;  // expose first result
+
+    self->result[1].l_name[0] = "type" ;
+    self->result[1].l_data[0] = "state" ;
+    self->result[1].i_value = A_STATE_INIT ;
+    self->result[1].result_type = UTHREAD_RESULT_INT ;  // expose input state
   }
   else
   {
@@ -63,12 +78,20 @@ void ft_aread(S_UserThread *self)
     // check if any thresholds were crossed
 
     int event = 0 ;
-    if ((lo_thres > 0) && (prev_value >= lo_thres) &&
-        (self->result[0].i_value < lo_thres))
+    if ((lo_thres >= 0) &&
+        (self->result[0].i_value < lo_thres) &&
+        (self->result[1].i_value != A_STATE_LO))
+    {
       event = 1 ;
-    if ((hi_thres > 0) && (prev_value <= hi_thres) &&
-        (self->result[0].i_value > hi_thres))
+      self->result[1].i_value = A_STATE_LO ;
+    }
+    if ((hi_thres >= 0) &&
+        (self->result[0].i_value > hi_thres) &&
+        (self->result[1].i_value != A_STATE_HI))
+    {
       event = 1 ;
+      self->result[1].i_value = A_STATE_HI ;
+    }
     if ((event) && (G_runtime->pubsub_state))   // publish this event on MQTT
     {
       char metric[BUF_LEN_LINE] ;
@@ -84,7 +107,6 @@ void ft_aread(S_UserThread *self)
       f_mqtt_publish(-1, metric) ;
     }
   }
-  prev_value = self->result[0].i_value ;
 
   // if we've been told to shutdown, turn off "pwr_pin" if user specified
 
