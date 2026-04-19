@@ -9,7 +9,7 @@
 void ft_aread(S_UserThread *self)
 {
   static thread_local int poll_ms=0, in_pin=-1, pwr_pin=-1 ;
-  static thread_local int lo_thres=-1, hi_thres=-1 ;
+  static thread_local int lo_thres=-1, hi_thres=-1, prev_value=-1 ;
   static long long next_run ;
 
   // on the first loop, parse our config and set the static variables above
@@ -46,10 +46,53 @@ void ft_aread(S_UserThread *self)
     }
   }
 
+  // on 2nd loop, initialize "prev_state" because we want "in_pin" to settle
 
+  if (self->loop == 1)
+  {
+    pinMode(in_pin, INPUT) ;
+    self->result[0].l_name[0] = "type" ;
+    self->result[0].l_data[0] = "value" ;
+    self->result[0].i_value = analogRead(in_pin) ;
+    self->result[0].result_type = UTHREAD_RESULT_INT ;  // expose first result
+  }
+  else
+  {
+    self->result[0].i_value = analogRead(in_pin) ;
 
+    // check if any thresholds were crossed
 
+    int event = 0 ;
+    if ((lo_thres > 0) && (prev_value >= lo_thres) &&
+        (self->result[0].i_value < lo_thres))
+      event = 1 ;
+    if ((hi_thres > 0) && (prev_value <= hi_thres) &&
+        (self->result[0].i_value > hi_thres))
+      event = 1 ;
+    if ((event) && (G_runtime->pubsub_state))   // publish this event on MQTT
+    {
+      char metric[BUF_LEN_LINE] ;
+      char tmp_buf[BUF_LEN_LINE], label_cfg[BUF_LEN_LINE] ;
 
+      snprintf(tmp_buf, BUF_LEN_LINE, "/%s.labels", self->name) ;
+      if (f_read_single_line(tmp_buf, label_cfg, BUF_LEN_LINE) < 1)
+        label_cfg[0] = 0 ;
+      f_render_metric(label_cfg, self->name, &self->result[0], tmp_buf,
+                      BUF_LEN_LINE) ;
+      snprintf(metric, BUF_LEN_LINE, "%s %d", tmp_buf,
+               self->result[0].i_value) ;
+      f_mqtt_publish(-1, metric) ;
+    }
+  }
+  prev_value = self->result[0].i_value ;
+
+  // if we've been told to shutdown, turn off "pwr_pin" if user specified
+
+  if ((self->state == UTHREAD_WRAPUP) && (pwr_pin >= 0))
+  {
+    digitalWrite(pwr_pin, LOW) ;
+    return ;                            // don't bother taking a nap
+  }
 
   // figure out how long to pause before the next poll
 
@@ -58,6 +101,7 @@ void ft_aread(S_UserThread *self)
   if (nap_ms < 1)
     nap_ms = 1 ;
   snprintf(self->status, BUF_LEN_UTHREAD_STATUS, "nap %ld ms", nap_ms) ;
+  delay(nap_ms) ;
 }
 
 /*

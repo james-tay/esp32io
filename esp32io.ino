@@ -218,6 +218,10 @@
    to load the "/<thread_name>.labels" file into a static buffer. After this,
    for each metric of interest, we call "f_render_metric()", which writes
    the metric name and labels (ie, no "<result>") to another static buffer.
+
+   User task threads which publish events via MQTT shall emit a payload which
+   looks identical to prometheus metrics format. Eg,
+     ldr1{type="value"} 395
 */
 
 // my custom header
