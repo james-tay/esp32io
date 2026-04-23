@@ -331,12 +331,16 @@ void f_ds18b20_cmd(int idx)
 /*
    This function is called from "f_user_thread_lifecycle()". We are supplied
    with the data pin and power pin arguments. Our job is to manage power and
-   call "f_sensor_ds18b20()" to perform the actual work.
+   call "f_sensor_ds18b20()" to perform the actual work. The first "result"
+   in this thread is the number of sensor read faults. Each subsequent "result"
+   is then a sensor reading.
 */
 
 void ft_ds18b20(S_UserThread *self)
 {
+  static thread_local int total_sensors=0 ;
   static thread_local long long ts_next_run=0 ;
+  static thread_local char addr_buf[DS18B20_MAX_PER_BUS * (16 + 1)] ;
 
   if (self->num_args != 3)      // don't run if we're called with bad arguments
   {
@@ -352,6 +356,10 @@ void ft_ds18b20(S_UserThread *self)
 
   if (self->loop == 0)
   {
+    self->result[0].l_name[0] = "read" ;
+    self->result[0].l_data[0] = "faults" ;
+    self->result[0].result_type = UTHREAD_RESULT_INT ;
+
     self->state = UTHREAD_RUNNING ;
     ts_next_run = esp_timer_get_time() ;
   }
@@ -365,9 +373,11 @@ void ft_ds18b20(S_UserThread *self)
   //   [<1st_dev_16chars>0x00][<2nd_dev_16chars>0x00]...
 
   int addr_size = (16 + 1) * DS18B20_MAX_PER_BUS ;
-  char addr_buf[addr_size], *addr_ptr=addr_buf ;
+  char *addr_ptr=addr_buf ;
   unsigned char dev[8] ;
-  memset(addr_buf, 0, addr_size) ;
+
+  if (self->loop == 0)
+    memset(addr_buf, 0, addr_size) ;            // one time initialization
 
   if (pwrPin >= 0)
   {
@@ -379,21 +389,26 @@ void ft_ds18b20(S_UserThread *self)
   // poll the one-wire bus, then expose whatever devices we found
 
   int total = f_sensor_ds18b20(dataPin, temperatures, addrs) ;
+  if (total > total_sensors)
+    total_sensors = total ;
+  if ((self->loop > 1) && (total < total_sensors))
+    self->result[0].i_value++ ;
+
   for (int i=0 ; i < total ; i++)
   {
     addr_ptr = addr_buf + (i*16) + i ; // point to location within "addr_buf"
     memcpy(dev, addrs + (i*8), 8) ;
     sprintf(addr_ptr, "%02x%02x%02x%02x%02x%02x%02x%02x",
             dev[0], dev[1], dev[2], dev[3], dev[4], dev[5], dev[6], dev[7]) ;
-    self->result[i].l_name[0] = "address" ;
-    self->result[i].l_data[0] = addr_ptr ;
-    self->result[i].f_value = temperatures[i] ;
-    self->result[i].result_type = UTHREAD_RESULT_FLOAT ;
+    self->result[i+1].l_name[0] = "address" ;
+    self->result[i+1].l_data[0] = addr_ptr ;
+    self->result[i+1].f_value = temperatures[i] ;
+    self->result[i+1].result_type = UTHREAD_RESULT_FLOAT ;
   }
 
   // if somehow we have fewer devices this time, don't expose stale metrics
 
-  for (int i=total ; i < DEF_MAX_THREAD_RESULTS ; i++)
+  for (int i=total+1 ; i < DEF_MAX_THREAD_RESULTS ; i++)
     self->result[i].result_type = UTHREAD_RESULT_NONE ;
 
   // power down the device(s) and then figure out how long to nap for
