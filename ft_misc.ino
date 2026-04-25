@@ -160,11 +160,23 @@ void ft_aread(S_UserThread *self)
    "triggers" are counted when "in_pin" goes low.
 */
 
+struct td_dread {
+  int poll_ms ;                 // how often we'll poll "in_pin"
+  int in_pin ;                  // duh !
+  int pwr_pin ;                 // optional device power ("-1" to disable)
+  int pullup ;                  // whether to apply a pullup voltage
+  int thres_ms ;                // used to suppress button debouncing
+  int ori_state ;               // GPIO input pin's original state
+  int prev_state ;              // duh !
+  int ref_state ;               // to track transients (eg, button debounce)
+  long long next_run ;          // duh !
+  long long state_change_time ; // duh !
+} ;
+typedef struct td_dread S_td_dread ;
+
 void ft_dread(S_UserThread *self)
 {
-  static thread_local int poll_ms=0, in_pin=-1, prev_state=0, ref_state=0 ;
-  static thread_local int pwr_pin=-1, pullup=0, thres_ms=0, ori_state=0 ;
-  static long long next_run, state_change_time ;
+  S_td_dread *td=NULL ;
 
   // on the first loop, parse our config and set the static variables above
 
@@ -177,41 +189,46 @@ void ft_dread(S_UserThread *self)
       return ;
     }
 
-    poll_ms = atoi(self->in_args[0]) ;  // how often we'll poll "in_pin"
-    in_pin = atoi(self->in_args[1]) ;   // the GPIO pin we digitalRead() on
-    pwr_pin = atoi(self->in_args[2]) ;  // the pin powering the peripheral
-    pullup = atoi(self->in_args[3]) ;   // whether to apply a pullup voltage
-    if (self->in_args[4] != NULL)
-      thres_ms = atoi(self->in_args[4]) ; // used to suppress false triggering
+    self->malloc_buf = malloc(sizeof(S_td_dread)) ;
+    memset(self->malloc_buf, 0, sizeof(S_td_dread)) ;
+    td = (S_td_dread*) self->malloc_buf ;
 
-    next_run = esp_timer_get_time() ;
+    td->poll_ms = atoi(self->in_args[0]) ;      // how often to poll "in_pin"
+    td->in_pin = atoi(self->in_args[1]) ;       // GPIO pin we digitalRead() on
+    td->pwr_pin = atoi(self->in_args[2]) ;      // optional power pin
+    td->pullup = atoi(self->in_args[3]) ;       // whether to apply a pullup
+    if (self->in_args[4] != NULL)
+      td->thres_ms = atoi(self->in_args[4]) ;   // to suppress false triggering
+
+    td->next_run = esp_timer_get_time() ;
     self->state = UTHREAD_RUNNING ;
 
-    if (poll_ms > DEF_MAX_THREAD_WRAPUP_MSEC / 2)       // limit max poll time
-      poll_ms = DEF_MAX_THREAD_WRAPUP_MSEC / 2 ;
-    if (poll_ms < 1)
-      poll_ms = 1 ;                                     // limit min poll time
+    if (td->poll_ms > DEF_MAX_THREAD_WRAPUP_MSEC / 2)
+      td->poll_ms = DEF_MAX_THREAD_WRAPUP_MSEC / 2 ;    // limit max poll time
+    if (td->poll_ms < 1)
+      td->poll_ms = 1 ;                                 // limit min poll time
 
-    if (pullup)
-      pinMode(in_pin, INPUT_PULLUP) ;   // use built-in pull up resistor
+    if (td->pullup)
+      pinMode(td->in_pin, INPUT_PULLUP) ;       // use built-in pull up
     else
-      pinMode(in_pin, INPUT) ;          // floating input
+      pinMode(td->in_pin, INPUT) ;              // floating input
 
-    if (pwr_pin >= 0)                   // if user specified a power pin
+    if (td->pwr_pin >= 0)                       // if user specified power pin
     {
-      pinMode(pwr_pin, OUTPUT) ;
-      digitalWrite(pwr_pin, HIGH) ;
+      pinMode(td->pwr_pin, OUTPUT) ;
+      digitalWrite(td->pwr_pin, HIGH) ;
     }
   }
+  td = (S_td_dread*) self->malloc_buf ;
 
   // on 2nd loop, initialize "prev_state" because we want "in_pin" to settle
 
   if (self->loop == 1)
   {
-    prev_state = digitalRead(in_pin) ;
-    ref_state = prev_state ;
-    ori_state = prev_state ;                    // "ori_state" is set ONCE
-    state_change_time = esp_timer_get_time() ;
+    td->prev_state = digitalRead(td->in_pin) ;
+    td->ref_state = td->prev_state ;
+    td->ori_state = td->prev_state ;            // "ori_state" is set ONCE
+    td->state_change_time = esp_timer_get_time() ;
 
     // configure the metrics we'll expose
 
@@ -225,9 +242,9 @@ void ft_dread(S_UserThread *self)
     self->result[2].l_name[0] = "type" ;
     self->result[2].l_data[0] = "triggers" ;
 
-    self->result[0].i_value = ref_state ;
+    self->result[0].i_value = td->ref_state ;
     if (G_runtime->config.debug)
-      Serial.printf("DEBUG: ft_dread() ori_state:%d\r\n.", ori_state) ;
+      Serial.printf("DEBUG: ft_dread() ori_state:%d\r\n", td->ori_state) ;
   }
   else
   {
@@ -240,33 +257,33 @@ void ft_dread(S_UserThread *self)
     //   a) emit an event
     //   b) update "ref_state"
 
-    int cur_state = digitalRead(in_pin) ;
+    int cur_state = digitalRead(td->in_pin) ;
 
-    if (cur_state != prev_state)                        // condition 2.
+    if (cur_state != td->prev_state)                    // condition 2.
     {
-      if (cur_state == ref_state)                       // found a transient
+      if (cur_state == td->ref_state)                   // found a transient
       {
-        state_change_time = 0 ;
+        td->state_change_time = 0 ;
         self->result[1].ll_value++ ;                    // "transients" metric
       }
       else
-        state_change_time = esp_timer_get_time() ;      // note change time
-      prev_state = cur_state ;
+        td->state_change_time = esp_timer_get_time() ;  // note change time
+      td->prev_state = cur_state ;
     }
 
-    if (cur_state != ref_state)
+    if (cur_state != td->ref_state)
     {
       long long now = esp_timer_get_time() ;
-      long long dur = now - state_change_time ;
-      if (dur > (thres_ms * 1000))                      // condition 3.
+      long long dur = now - td->state_change_time ;
+      if (dur > (td->thres_ms * 1000))                  // condition 3.
       {
         if (G_runtime->config.debug)
           Serial.printf("DEBUG: ft_dread() state %d->%d\r\n",
-                        ref_state, cur_state) ;
+                        td->ref_state, cur_state) ;
 
-        ref_state = cur_state ;
+        td->ref_state = cur_state ;
         self->result[0].i_value = cur_state ;           // "state" metric
-        if (cur_state != ori_state)
+        if (cur_state != td->ori_state)
           self->result[2].ll_value++ ;                  // "triggers" metric
 
         if (G_runtime->pubsub_state)
@@ -288,16 +305,16 @@ void ft_dread(S_UserThread *self)
 
   // if we've been told to shutdown, turn off "pwr_pin" if user specified
 
-  if ((self->state == UTHREAD_WRAPUP) && (pwr_pin >= 0))
+  if ((self->state == UTHREAD_WRAPUP) && (td->pwr_pin >= 0))
   {
-    digitalWrite(pwr_pin, LOW) ;
+    digitalWrite(td->pwr_pin, LOW) ;
     return ;                            // don't bother taking a nap
   }
 
   // figure out how long to pause before the next poll
 
-  next_run = next_run + (poll_ms * 1000) ;
-  long nap_ms = (next_run - esp_timer_get_time()) / 1000 ;
+  td->next_run = td->next_run + (td->poll_ms * 1000) ;
+  long nap_ms = (td->next_run - esp_timer_get_time()) / 1000 ;
   if (nap_ms < 1)
     nap_ms = 1 ;
   snprintf(self->status, BUF_LEN_UTHREAD_STATUS, "nap %ld ms", nap_ms) ;
