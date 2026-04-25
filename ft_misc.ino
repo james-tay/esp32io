@@ -398,8 +398,6 @@ void ft_utasks(S_UserThread *self)
 
 void ft_wd(S_UserThread *self)
 {
-  static thread_local long long my_start_time=0 ;
-
   if (self->num_args != 3)              // don't run if our params are wrong
   {
     strncpy(self->status, "Incorrect arguments", BUF_LEN_UTHREAD_STATUS) ;
@@ -410,7 +408,6 @@ void ft_wd(S_UserThread *self)
   if (self->loop == 0)
   {
     self->state = UTHREAD_RUNNING ;             // indicate that we're alive
-    my_start_time = esp_timer_get_time() ;      // mark our startup time
 
     // configure the result values we expose
 
@@ -420,6 +417,10 @@ void ft_wd(S_UserThread *self)
     self->result[1].result_type = UTHREAD_RESULT_LONGLONG ;
     self->result[1].l_name[0] = "last_activity_sec" ;
     self->result[1].l_data[0] = "webserver" ;
+
+    // track my start time in result[2], but don't expose this as a metric
+
+    self->result[2].ll_value = esp_timer_get_time() ; // mark our startup time
   }
 
   int startup_ignore_secs = atoi(self->in_args[0]) ;
@@ -427,26 +428,31 @@ void ft_wd(S_UserThread *self)
   int no_activity_reboot_secs = atoi(self->in_args[2]) ;
 
   long long now = esp_timer_get_time() ;
+  long long my_start_time = self->result[2].ll_value ;
   self->result[0].ll_value = (now - G_runtime->serial_ts_last_read) / 1000000 ;
   self->result[1].ll_value = (now - G_runtime->web_ts_last_accept) / 1000000 ;
 
+  // update our status message to indicate if we're "armed" yet.
+
   if ((now - my_start_time) / 1000000 > startup_ignore_secs)
-    strncpy(self->status, "watchdog running", BUF_LEN_UTHREAD_STATUS) ;
+  {
+    strncpy(self->status, "watchdog armed", BUF_LEN_UTHREAD_STATUS) ;
+
+    // if both console and webserver idle is too large, reboot immediately
+
+    if ((self->result[0].ll_value > no_activity_reboot_secs) &&
+        (self->result[1].ll_value > no_activity_reboot_secs))
+    {
+      Serial.printf("FATAL! Watchdog triggered, rebooting.\r\n") ;
+      delay(1000) ;
+      ESP.restart() ;
+    }
+  }
   else
     snprintf(self->status, BUF_LEN_UTHREAD_STATUS, "watchdog idle %d/%d/%d",
              startup_ignore_secs,
              check_interval_secs,
              no_activity_reboot_secs) ;
-
-  // if both console and webserver idle is too large, reboot immediately
-
-  if ((self->result[0].ll_value > no_activity_reboot_secs) &&
-      (self->result[1].ll_value > no_activity_reboot_secs))
-  {
-    Serial.printf("FATAL! Watchdog triggered, rebooting.\r\n") ;
-    delay(1000) ;
-    ESP.restart() ;
-  }
 
   delay (check_interval_secs * 1000) ;
 }

@@ -118,7 +118,7 @@ void f_task_help(int idx)
           "ft_ds18b20:<c>,<dataPin>,<pwrPin>,<intervalSecs>\r\n"
           "ft_serial:<c>,<tcpPort>,<baud>,<rxPin>,<txPin>,<pollMs>\r\n"
           "ft_utasks:<c>,<filename>\r\n"
-          "ft_wg:<c>,<startupSecs>,<intervalSecs>,<noActivitySecs>\r\n",
+          "ft_wd:<c>,<startupSecs>,<intervalSecs>,<noActivitySecs>\r\n",
           BUF_LEN_WORKER_RESULT) ;
   G_runtime->worker[idx].result_code = 400 ;
 }
