@@ -190,8 +190,9 @@ struct user_thread {
 
   // thread's runtime data and results come here
 
-  char status[BUF_LEN_UTHREAD_STATUS] ; // user thread status string buffer
   S_ThreadResult result[DEF_MAX_THREAD_RESULTS] ;       // all metrics exposed
+  char status[BUF_LEN_UTHREAD_STATUS] ; // user thread status string buffer
+  void *malloc_buf ;                    // thread's locally malloc'ed buffer
 
 } ; typedef struct user_thread S_UserThread ;
 

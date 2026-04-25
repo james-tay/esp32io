@@ -286,8 +286,6 @@ int f_sensor_ds18b20(int pin, float *t_values, unsigned char *addrs)
     unsigned short raw = (data[1] << 8) | data[0] ;
     t_values[idx] = (float) raw / 16.0 ;
   }
-  if (G_runtime->config.debug)
-    Serial.printf("DEBUG: f_sensor_ds18b20() found %d devices.\r\n", count) ;
   return(count) ;
 }
 
@@ -336,11 +334,19 @@ void f_ds18b20_cmd(int idx)
    is then a sensor reading.
 */
 
+struct td_ds18b20 {
+  int dataPin ;                                 // one wire bus
+  int pwrPin ;                                  // power to sensors
+  int intervalSecs ;                            // how often we poll
+  int total_sensors ;                           // total sensors found on bus
+  long long ts_next_run ;                       // time of next intended run
+  char addr_buf[DS18B20_MAX_PER_BUS * (16 + 1)] ; // buffer for dev addresses
+} ;
+typedef struct td_ds18b20 S_td_ds18b20 ;
+
 void ft_ds18b20(S_UserThread *self)
 {
-  static thread_local int total_sensors=0 ;
-  static thread_local long long ts_next_run=0 ;
-  static thread_local char addr_buf[DS18B20_MAX_PER_BUS * (16 + 1)] ;
+  S_td_ds18b20 *td=NULL ;       // thread local data
 
   if (self->num_args != 3)      // don't run if we're called with bad arguments
   {
@@ -348,55 +354,73 @@ void ft_ds18b20(S_UserThread *self)
     self->state = UTHREAD_STOPPED ;
     return ;
   }
-  long long ts_start = esp_timer_get_time() ;
-
-  int dataPin = atoi(self->in_args[0]) ;
-  int pwrPin = atoi(self->in_args[1]) ;
-  int intervalSecs = atoi(self->in_args[2]) ;
 
   if (self->loop == 0)
   {
+    // prepare thread local data
+
+    self->malloc_buf = malloc(sizeof(S_td_ds18b20)) ;
+    if (self->malloc_buf == NULL)
+    {
+      strncpy(self->status, "malloc failed", BUF_LEN_UTHREAD_STATUS) ;
+      self->state = UTHREAD_STOPPED ;
+      return ;
+    }
+    memset(self->malloc_buf, 0, sizeof(S_td_ds18b20)) ;
+
+    td = (S_td_ds18b20*) self->malloc_buf ;
+    td->dataPin = atoi(self->in_args[0]) ;
+    td->pwrPin = atoi(self->in_args[1]) ;
+    td->intervalSecs = atoi(self->in_args[2]) ;
+    td->ts_next_run = esp_timer_get_time() ;
+
+    // setup thread's first result only ... which is a faults counter
+
     self->result[0].l_name[0] = "read" ;
     self->result[0].l_data[0] = "faults" ;
     self->result[0].result_type = UTHREAD_RESULT_INT ;
 
     self->state = UTHREAD_RUNNING ;
-    ts_next_run = esp_timer_get_time() ;
   }
 
+  td = (S_td_ds18b20*) self->malloc_buf ;
+  long long ts_start = esp_timer_get_time() ;
   float temperatures[DS18B20_MAX_PER_BUS] ;
   unsigned char addrs[DS18B20_MAX_PER_BUS * 8] ; // 8x hex bytes per device
 
-  // "addr_buf[]" holds the (hex) string representation for addresses of all
+  // "addrs" is a temporary buffer we pass to "f_sensor_ds18b20()", while
+  // "td->addr_buf" holds the (hex) string representation for addresses of all
   // possible sensors. This space is used to populate "l_data" in each of the
   // results we'll expose. Thus, the "addr_buf[]" has the format,
   //   [<1st_dev_16chars>0x00][<2nd_dev_16chars>0x00]...
 
   int addr_size = (16 + 1) * DS18B20_MAX_PER_BUS ;
-  char *addr_ptr=addr_buf ;
-  unsigned char dev[8] ;
+  char *addr_ptr=td->addr_buf ;
+  unsigned char dev[8] ;        // buffer to help us sprintf() dev addr
 
-  if (self->loop == 0)
-    memset(addr_buf, 0, addr_size) ;            // one time initialization
-
-  if (pwrPin >= 0)
+  if (td->pwrPin >= 0)
   {
-    pinMode(pwrPin, OUTPUT) ;
-    digitalWrite(pwrPin, HIGH) ;
+    pinMode(td->pwrPin, OUTPUT) ;
+    digitalWrite(td->pwrPin, HIGH) ;
     delay(DS18B20_POWER_ON_DELAY_MS) ;
   }
 
   // poll the one-wire bus, then expose whatever devices we found
 
-  int total = f_sensor_ds18b20(dataPin, temperatures, addrs) ;
-  if (total > total_sensors)
-    total_sensors = total ;
-  if ((self->loop > 1) && (total < total_sensors))
-    self->result[0].i_value++ ;
+  int total = f_sensor_ds18b20(td->dataPin, temperatures, addrs) ;
+  if (total > td->total_sensors)
+    td->total_sensors = total ;
+  if ((self->loop > 1) && (total < td->total_sensors))
+  {
+    self->result[0].i_value++ ;                 // read fault occured
+    if (G_runtime->config.debug)
+      Serial.printf("DEBUG: ft_ds18b20() found %d devices, expecting %d.\r\n",
+                    total, td->total_sensors) ;
+  }
 
   for (int i=0 ; i < total ; i++)
   {
-    addr_ptr = addr_buf + (i*16) + i ; // point to location within "addr_buf"
+    addr_ptr = td->addr_buf + (i*16) + i ; // a location within "addr_buf"
     memcpy(dev, addrs + (i*8), 8) ;
     sprintf(addr_ptr, "%02x%02x%02x%02x%02x%02x%02x%02x",
             dev[0], dev[1], dev[2], dev[3], dev[4], dev[5], dev[6], dev[7]) ;
@@ -413,12 +437,12 @@ void ft_ds18b20(S_UserThread *self)
 
   // power down the device(s) and then figure out how long to nap for
 
-  if (pwrPin >= 0)
-    digitalWrite(pwrPin, LOW) ;
+  if (td->pwrPin >= 0)
+    digitalWrite(td->pwrPin, LOW) ;
 
   long long ts_end = esp_timer_get_time() ;
-  ts_next_run = ts_next_run + (intervalSecs * 1000000) ;
-  long long nap_ms = (ts_next_run - ts_end) / 1000 ;
+  td->ts_next_run = td->ts_next_run + (td->intervalSecs * 1000000) ;
+  long long nap_ms = (td->ts_next_run - ts_end) / 1000 ;
   snprintf(self->status, BUF_LEN_UTHREAD_STATUS,
            "polled %d devices in %lldms, nap %lld ms",
            total, (ts_end - ts_start) / 1000, nap_ms) ;

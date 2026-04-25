@@ -429,6 +429,11 @@ void f_task_stop(int idx, char *name)
       (G_runtime->utask[slot].state == UTHREAD_STOPPED))
   {
     vTaskDelete(G_runtime->utask[slot].tid) ;
+    if (G_runtime->utask[slot].malloc_buf != NULL)      // thread local buffer
+    {
+      free(G_runtime->utask[slot].malloc_buf) ;
+      G_runtime->utask[slot].malloc_buf = NULL ;
+    }
     G_runtime->utask[slot].state = UTHREAD_IDLE ;
   }
   xSemaphoreGive(G_runtime->L_uthread) ;
