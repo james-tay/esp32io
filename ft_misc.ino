@@ -12,15 +12,23 @@
    event is generated when we cross "lo_thres".
 */
 
+struct td_aread {
+  int poll_ms ;                 // analogRead polling frequency
+  int in_pin ;                  // input GPIO pin
+  int pwr_pin ;                 // optional device power ("-1" to disable)
+  int lo_thres ;                // publish an MQTT event if climbing past this
+  int hi_thres ;                // publish an MQTT even if dropping below this
+  long long next_run ;          // timestamp of our next scheduled poll
+} ;
+typedef struct td_aread S_td_aread ;
+
 void ft_aread(S_UserThread *self)
 {
   #define A_STATE_INIT 0        // boot up state, if we're between lo & hi
   #define A_STATE_LO 1          // value has dipped below "lo_thres"
   #define A_STATE_HI 2          // value has climbed above "hi_thres"
 
-  static thread_local int poll_ms=0, in_pin=-1, pwr_pin=-1 ;
-  static thread_local int lo_thres=-1, hi_thres=-1 ;
-  static long long next_run ;
+  S_td_aread *td=NULL ;
 
   // on the first loop, parse our config and set the static variables above
 
@@ -33,37 +41,44 @@ void ft_aread(S_UserThread *self)
       return ;
     }
 
-    poll_ms = atoi(self->in_args[0]) ;
-    in_pin = atoi(self->in_args[1]) ;
-    pwr_pin = atoi(self->in_args[2]) ;
-    if (self->num_args > 3)
-      lo_thres = atoi(self->in_args[3]) ;
-    if (self->num_args > 4)
-      hi_thres = atoi(self->in_args[4]) ;
+    self->malloc_buf = malloc(sizeof(S_td_aread)) ;
+    memset(self->malloc_buf, 0, sizeof(S_td_aread)) ;
+    td = (S_td_aread*) self->malloc_buf ;
 
-    next_run = esp_timer_get_time() ;
+    td->lo_thres = -1 ;
+    td->hi_thres = -1 ;
+    td->poll_ms = atoi(self->in_args[0]) ;
+    td->in_pin = atoi(self->in_args[1]) ;
+    td->pwr_pin = atoi(self->in_args[2]) ;
+    if (self->num_args > 3)
+      td->lo_thres = atoi(self->in_args[3]) ;
+    if (self->num_args > 4)
+      td->hi_thres = atoi(self->in_args[4]) ;
+
+    td->next_run = esp_timer_get_time() ;
     self->state = UTHREAD_RUNNING ;
 
-    if (poll_ms > DEF_MAX_THREAD_WRAPUP_MSEC / 2)       // limit max poll time
-      poll_ms = DEF_MAX_THREAD_WRAPUP_MSEC / 2 ;
-    if (poll_ms < 1)
-      poll_ms = 1 ;                                     // limit min poll time
+    if (td->poll_ms > DEF_MAX_THREAD_WRAPUP_MSEC / 2)   // limit max poll time
+      td->poll_ms = DEF_MAX_THREAD_WRAPUP_MSEC / 2 ;
+    if (td->poll_ms < 1)
+      td->poll_ms = 1 ;                                 // limit min poll time
 
-    if (pwr_pin >= 0)                   // if user specified a power pin
+    if (td->pwr_pin >= 0)                       // if user specified power pin
     {
-      pinMode(pwr_pin, OUTPUT) ;
-      digitalWrite(pwr_pin, HIGH) ;
+      pinMode(td->pwr_pin, OUTPUT) ;
+      digitalWrite(td->pwr_pin, HIGH) ;
     }
   }
+  td = (S_td_aread*) self->malloc_buf ;
 
   // on 2nd loop, read our first value because we want "in_pin" to settle
 
   if (self->loop == 1)
   {
-    pinMode(in_pin, INPUT) ;
+    pinMode(td->in_pin, INPUT) ;
     self->result[0].l_name[0] = "type" ;
     self->result[0].l_data[0] = "value" ;
-    self->result[0].i_value = analogRead(in_pin) ;
+    self->result[0].i_value = analogRead(td->in_pin) ;
     self->result[0].result_type = UTHREAD_RESULT_INT ;  // expose first result
 
     self->result[1].l_name[0] = "type" ;
@@ -73,20 +88,20 @@ void ft_aread(S_UserThread *self)
   }
   else
   {
-    self->result[0].i_value = analogRead(in_pin) ;
+    self->result[0].i_value = analogRead(td->in_pin) ;
 
     // check if any thresholds were crossed
 
     int event = 0 ;
-    if ((lo_thres >= 0) &&
-        (self->result[0].i_value < lo_thres) &&
+    if ((td->lo_thres >= 0) &&
+        (self->result[0].i_value < td->lo_thres) &&
         (self->result[1].i_value != A_STATE_LO))
     {
       event = 1 ;
       self->result[1].i_value = A_STATE_LO ;
     }
-    if ((hi_thres >= 0) &&
-        (self->result[0].i_value > hi_thres) &&
+    if ((td->hi_thres >= 0) &&
+        (self->result[0].i_value > td->hi_thres) &&
         (self->result[1].i_value != A_STATE_HI))
     {
       event = 1 ;
@@ -110,16 +125,16 @@ void ft_aread(S_UserThread *self)
 
   // if we've been told to shutdown, turn off "pwr_pin" if user specified
 
-  if ((self->state == UTHREAD_WRAPUP) && (pwr_pin >= 0))
+  if ((self->state == UTHREAD_WRAPUP) && (td->pwr_pin >= 0))
   {
-    digitalWrite(pwr_pin, LOW) ;
+    digitalWrite(td->pwr_pin, LOW) ;
     return ;                            // don't bother taking a nap
   }
 
   // figure out how long to pause before the next poll
 
-  next_run = next_run + (poll_ms * 1000) ;
-  long nap_ms = (next_run - esp_timer_get_time()) / 1000 ;
+  td->next_run = td->next_run + (td->poll_ms * 1000) ;
+  long nap_ms = (td->next_run - esp_timer_get_time()) / 1000 ;
   if (nap_ms < 1)
     nap_ms = 1 ;
   snprintf(self->status, BUF_LEN_UTHREAD_STATUS, "nap %ld ms", nap_ms) ;
