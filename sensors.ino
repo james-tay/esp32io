@@ -8,6 +8,8 @@
 #define DS18B20_MAX_PER_BUS 8           // max devices per GPIO pin
 #define DS18B20_POLL_DELAY 800          // based on datasheet page 1
 #define DS18B20_POWER_ON_DELAY_MS 20    // wait for voltage to stabilize
+#define DS18B20_TEMP_MAX 125.0          // maximum valid temperature reading
+#define DS18B20_TEMP_MIN -55.0          // minimum valid temperature reading
 
 /*
    This function polls a DHT22 at "pin". If successful, the "temperature" and
@@ -114,13 +116,16 @@ void f_dht22_cmd(int idx)
    This function is called from "f_user_thread_lifecycle()". We are supplied
    with 2x arguments, the DHT22's data pin and power pin. Our job is to power
    on the DHT22, poll it and power it down. Once we have a reading, we expose
-   them as metrics for prometheus to scrape.
+   them as metrics for prometheus to scrape. This thread uses/exposes the
+   following results,
+     result[0].f_value  - temperature
+     result[1].f_value  - humidity
+     result[2].i_value  - abnormal readings, eg, checksum failed
+     result[3].ll_value - (internal use only) timestamp of next run
 */
 
 void ft_dht22(S_UserThread *self)
 {
-  static thread_local long long ts_next_run=0 ;
-
   if (self->num_args != 3)      // don't run if we're called with bad arguments
   {
     strncpy(self->status, "Incorrect arguments", BUF_LEN_UTHREAD_STATUS) ;
@@ -140,7 +145,7 @@ void ft_dht22(S_UserThread *self)
     self->result[1].l_data[0] = "humidity" ;
     self->result[2].l_name[0] = "readings" ;
     self->result[2].l_data[0] = "abnormal" ;
-    ts_next_run = esp_timer_get_time() ;
+    self->result[3].ll_value = esp_timer_get_time() ; // internal use only !!
   }
 
   // if user defined the power pin, boot up the DHT22 now
@@ -213,11 +218,13 @@ void ft_dht22(S_UserThread *self)
   if (pwrPin >= 0)
     digitalWrite(pwrPin, LOW) ;
 
-  // update thread's status, then sit here until it's time to run again
+  // update thread's status, then sit here until it's time to run again.
+  // recall that "result[3].ll_value" is the timestamp of our next run.
 
   long long ts_end = esp_timer_get_time() ;
-  ts_next_run = ts_next_run + (intervalSecs * 1000000) ;
-  long long nap_ms = (ts_next_run - ts_end) / 1000 ;
+  self->result[3].ll_value = self->result[3].ll_value +
+                             (intervalSecs * 1000000) ;
+  long long nap_ms = (self->result[3].ll_value - ts_end) / 1000 ;
 
   if (strlen(err) > 0)          // something went wrong, don't expose results
   {
@@ -269,8 +276,6 @@ int f_sensor_ds18b20(int pin, float *t_values, unsigned char *addrs)
   for (int idx=0 ; idx < count ; idx++)
   {
     memcpy(dev, addr_ptr, 8) ;
-    addr_ptr = addr_ptr + 8 ;
-
     bus.reset() ;               // a reset "wakes" each device on the bus
     bus.select(dev) ;
     bus.write(0x44) ;           // start temperature conversion to scratch pad
@@ -284,7 +289,22 @@ int f_sensor_ds18b20(int pin, float *t_values, unsigned char *addrs)
     // temperature MSB and LSB are in the first 2 bytes
 
     unsigned short raw = (data[1] << 8) | data[0] ;
-    t_values[idx] = (float) raw / 16.0 ;
+    float cur = (float) raw / 16.0 ;
+
+    // make sure reading is within the valid range, otherwise mark this sensor
+    // as invalid by setting the first byte of its address to '0'.
+
+    if ((cur >= DS18B20_TEMP_MIN) && (cur <= DS18B20_TEMP_MAX))
+      t_values[idx] = cur ;
+    else
+    {
+      t_values[idx] = 0.0 ;
+      addr_ptr[0] = 0 ;                 // make device's address invalid
+      if (G_runtime->config.debug)
+        Serial.printf("DEBUG: Invalid temperature %f from sensor%d.\r\n",
+                      cur, idx) ;
+    }
+    addr_ptr = addr_ptr + 8 ;           // move on to next sensor's address
   }
   return(count) ;
 }
@@ -424,10 +444,23 @@ void ft_ds18b20(S_UserThread *self)
     memcpy(dev, addrs + (i*8), 8) ;
     sprintf(addr_ptr, "%02x%02x%02x%02x%02x%02x%02x%02x",
             dev[0], dev[1], dev[2], dev[3], dev[4], dev[5], dev[6], dev[7]) ;
-    self->result[i+1].l_name[0] = "address" ;
-    self->result[i+1].l_data[0] = addr_ptr ;
-    self->result[i+1].f_value = temperatures[i] ;
-    self->result[i+1].result_type = UTHREAD_RESULT_FLOAT ;
+
+    // make sure sensor's address begins with 0x28, otherwise it is invalid
+
+    if (dev[0] != 0x28)
+    {
+      self->result[0].i_value++ ;               // read an invalid sensor
+      if (G_runtime->config.debug)
+        Serial.printf("DEBUG: ft_ds18b20() invalid sensor address %s.\r\n",
+                      addr_ptr) ;
+    }
+    else
+    {
+      self->result[i+1].l_name[0] = "address" ;
+      self->result[i+1].l_data[0] = addr_ptr ;
+      self->result[i+1].f_value = temperatures[i] ;
+      self->result[i+1].result_type = UTHREAD_RESULT_FLOAT ;
+    }
   }
 
   // if somehow we have fewer devices this time, don't expose stale metrics
