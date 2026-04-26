@@ -42,6 +42,12 @@ void ft_aread(S_UserThread *self)
     }
 
     self->malloc_buf = malloc(sizeof(S_td_aread)) ;
+    if (self->malloc_buf == NULL)
+    {
+      strncpy(self->status, "malloc failed", BUF_LEN_UTHREAD_STATUS) ;
+      self->state = UTHREAD_STOPPED ;
+      return ;
+    }
     memset(self->malloc_buf, 0, sizeof(S_td_aread)) ;
     td = (S_td_aread*) self->malloc_buf ;
 
@@ -190,6 +196,12 @@ void ft_dread(S_UserThread *self)
     }
 
     self->malloc_buf = malloc(sizeof(S_td_dread)) ;
+    if (self->malloc_buf == NULL)
+    {
+      strncpy(self->status, "malloc failed", BUF_LEN_UTHREAD_STATUS) ;
+      self->state = UTHREAD_STOPPED ;
+      return ;
+    }
     memset(self->malloc_buf, 0, sizeof(S_td_dread)) ;
     td = (S_td_dread*) self->malloc_buf ;
 
