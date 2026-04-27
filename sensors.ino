@@ -288,7 +288,7 @@ int f_sensor_ds18b20(int pin, float *t_values, unsigned char *addrs)
 
     // temperature MSB and LSB are in the first 2 bytes
 
-    unsigned short raw = (data[1] << 8) | data[0] ;
+    short raw = (data[1] << 8) | data[0] ;
     float cur = (float) raw / 16.0 ;
 
     // make sure reading is within the valid range, otherwise mark this sensor
