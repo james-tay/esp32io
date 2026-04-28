@@ -1,4 +1,34 @@
 /*
+   This function is called from "f_action()". If no arguments are provided,
+   we print the help message, otherwise we identify the "ft_relay()" thread
+   specified and directly modify its "result[0].i_value".
+*/
+
+void f_relay_cmd(int idx)
+{
+
+
+
+
+}
+
+/*
+   The following functions implement the electrical actions to turn a relay
+   on or off at the specified GPIO pin. They're called from "ft_relay()".
+*/
+
+void f_relay_on(int pin)
+{
+  pinMode(pin, OUTPUT) ;
+  digitalWrite(pin, LOW) ;
+}
+
+void f_relay_off(int pin)
+{
+  pinMode(pin, INPUT) ;
+}
+
+/*
    This thread implements safe relay control. This thread controls the GPIO
    pin which controls the relay and must be running before calling the "relay"
    command to turn it on/off. Specifically, the desired relay state is
@@ -32,6 +62,8 @@
 struct td_relay {
   int pin ;             // GPIO pin which controls the relay
   int timeout_secs ;    // turn off if not (re)commanded on within this time
+  int cur_state ;       // whether the relay is currently on
+  long long on_time ;   // timestamp of when relay was turned on
 } ;
 typedef struct td_relay S_td_relay ;
 
@@ -62,8 +94,41 @@ void ft_relay(S_UserThread *self)
 
     td->pin = atoi(self->in_args[0]) ;          // GPIO pin to control relay
     td->timeout_secs = atoi(self->in_args[1]) ; // time out to deactivate relay
+    td->cur_state = 0 ;                         // initial state must be off
+    f_relay_off(td->pin) ;                      // pin state at power on
+
+    // note that "result[0].i_value" is updated by "f_relay_cmd()".
+
+    self->result[0].l_name[0] = "relay" ;
+    self->result[0].l_data[0] = "state" ;
+    self->result[0].result_type = UTHREAD_RESULT_INT ;
+    self->result[0].i_value = 0 ;                       // 1=on 0=off -1=fault
+    self->result[1].l_name[0] = "timeout_secs" ;
+    self->result[1].l_data[0] = "remaining" ;
+    self->result[1].result_type = UTHREAD_RESULT_INT ;
+    self->result[1].i_value = 0 ;                       // auto off time left
     self->state = UTHREAD_RUNNING ;
   }
+
+  // if we're off but have been commanded on
+
+  if ((td->cur_state == 0) && (self->result[0].i_value == 1))
+  {
+    f_relay_on(td->pin) ;
+    td->cur_state = 1 ;
+    td->on_time = esp_timer_get_time() ;
+  }
+
+  // if we're on but have been commanded off
+
+  if ((td->cur_state == 1) && (self->result[0].i_value == 0))
+  {
+    f_relay_off(td->pin) ;
+    td->cur_state = 0 ;
+    self->result[1].i_value = 0 ;
+  }
+
+  // if we're on, check if it's time to automatically turn off (ie, fault)
 
 
 

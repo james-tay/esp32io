@@ -301,6 +301,7 @@ void f_action(int idx)
       "mqtt ...         manage MQTT\r\n"
       "ntp <server>     update local clock\r\n"
       "ota <url>        perform a software update\r\n"
+      "relay ...        control a relay\r\n"
       "reload           reload/reboot the device\r\n"
       "set ...          set device configuration\r\n"
       "task ...         manage task threads\r\n"
@@ -349,6 +350,9 @@ void f_action(int idx)
   else
   if (strcmp(keyword, "ota") == 0)                              // ota
     f_ota_cmd(idx) ;
+  else
+  if (strcmp(keyword, "relay") == 0)                            // relay
+    f_relay_cmd(idx) ;
   else
   if (strcmp(keyword, "reload") == 0)                           // reload
     G_runtime->request_reload = 1 ;
