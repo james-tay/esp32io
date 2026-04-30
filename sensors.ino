@@ -10,6 +10,8 @@
 #define DS18B20_POWER_ON_DELAY_MS 20    // wait for voltage to stabilize
 #define DS18B20_TEMP_MAX 125.0          // maximum valid temperature reading
 #define DS18B20_TEMP_MIN -55.0          // minimum valid temperature reading
+#define DS18B20_MAX_DELTA 5.0           // max temperature swing between polls
+#define DS18B20_MAX_RETRIES 3           // repeat if temperature swing is large
 
 /*
    This function polls a DHT22 at "pin". If successful, the "temperature" and
@@ -402,10 +404,11 @@ void ft_ds18b20(S_UserThread *self)
 
     self->state = UTHREAD_RUNNING ;
   }
-
   td = (S_td_ds18b20*) self->malloc_buf ;
+
+  int total, retries ;
   long long ts_start = esp_timer_get_time() ;
-  float temperatures[DS18B20_MAX_PER_BUS] ;
+  float temperatures[DS18B20_MAX_PER_BUS], previous[DS18B20_MAX_PER_BUS] ;
   unsigned char addrs[DS18B20_MAX_PER_BUS * 8] ; // 8x hex bytes per device
 
   // "addrs" is a temporary buffer we pass to "f_sensor_ds18b20()", while
@@ -425,17 +428,35 @@ void ft_ds18b20(S_UserThread *self)
     delay(DS18B20_POWER_ON_DELAY_MS) ;
   }
 
-  // poll the one-wire bus, then expose whatever devices we found
+  // poll sensors up to DS18B20_MAX_RETRIES times to confirm temperature
+  // readings fall within DS18B20_MAX_DELTA before we accept them.
 
-  int total = f_sensor_ds18b20(td->dataPin, temperatures, addrs) ;
-  if (total > td->total_sensors)
-    td->total_sensors = total ;
-  if ((self->loop > 1) && (total < td->total_sensors))
+  retries = DS18B20_MAX_RETRIES ;               // do several temperature polls
+  while (retries > 0)
   {
-    self->result[0].i_value++ ;                 // read fault occured
-    if (G_runtime->config.debug)
-      Serial.printf("DEBUG: ft_ds18b20() found %d devices, expecting %d.\r\n",
-                    total, td->total_sensors) ;
+    total = f_sensor_ds18b20(td->dataPin, temperatures, addrs) ;
+    if (total > td->total_sensors)
+      td->total_sensors = total ;
+    if ((self->loop > 1) && (total < td->total_sensors))        // read fault
+    {
+      self->result[0].i_value++ ;                       // update fault metric
+      if (G_runtime->config.debug)
+        Serial.printf("DEBUG: ft_ds18b20() found %d devices, expecting %d.\r\n",
+                      total, td->total_sensors) ;
+    }
+    else                        // check readings against previous readings
+    {
+      for (int i=0 ; i < total ; i++)
+      {
+        if ((retries < DS18B20_MAX_RETRIES) &&
+            (fabsf(previous[i] - temperatures[i]) > DS18B20_MAX_DELTA))
+          total = 0 ;                                   // mark readings as bad
+        previous[i] = temperatures[i] ;
+      }
+      if ((retries < DS18B20_MAX_RETRIES) && (total == td->total_sensors))
+        break ;                                         // all readings good !!
+    }
+    retries-- ;
   }
 
   for (int i=0 ; i < total ; i++)
