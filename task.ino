@@ -182,9 +182,11 @@ void f_user_thread_lifecycle(void *param)
     Serial.printf("DEBUG: f_user_thread_lifecycle() name:%s ft_addr:%x\r\n",
                   self->name, self->ft_addr) ;
 
-  // user thread's main loop
+  // user thread's main loop, keep calling the thread's function.
 
-  while ((self->state == UTHREAD_STARTING) || (self->state == UTHREAD_RUNNING))
+  while ((self->state == UTHREAD_STARTING) ||
+         (self->state == UTHREAD_RUNNING) ||
+         (self->state == UTHREAD_WRAPUP))
   {
     self->ft_addr(self) ;
     self->loop++ ;
@@ -216,6 +218,9 @@ int f_set_ft_addr(int slot, char *ft_name)
   else
   if (strcmp(ft_name, "ft_ds18b20") == 0)
     G_runtime->utask[slot].ft_addr = ft_ds18b20 ;
+  else
+  if (strcmp(ft_name, "ft_relay") == 0)
+    G_runtime->utask[slot].ft_addr = ft_relay ;
   else
   if (strcmp(ft_name, "ft_serial") == 0)
     G_runtime->utask[slot].ft_addr = ft_serial ;

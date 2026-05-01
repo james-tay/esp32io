@@ -18,8 +18,68 @@ void f_relay_cmd(int idx)
     G_runtime->worker[idx].result_code = 400 ;
     return ;
   }
+  name = tokens[1] ;
+  action = tokens[2] ;
 
+  // attempt to locate an "ft_relay()" instance with "name" that is running
 
+  int slot ;
+  for (slot=0 ; slot < DEF_MAX_USER_THREADS ; slot++)
+    if ((G_runtime->utask[slot].state == UTHREAD_RUNNING) &&
+        (G_runtime->utask[slot].ft_addr == ft_relay) &&
+        (strcmp(G_runtime->utask[slot].name, name) == 0))
+      break ;                                                   // found it !
+
+  if (slot == DEF_MAX_USER_THREADS)
+  {
+    strncpy(G_runtime->worker[idx].result_msg, "No such relay instance\r\n",
+            BUF_LEN_WORKER_RESULT) ;
+    G_runtime->worker[idx].result_code = 400 ;
+    return ;
+  }
+
+  // handle the supplied "on" or "off" action
+
+  if (strcmp(action, "on") == 0)
+  {
+    if (G_runtime->utask[slot].result[0].i_value == 1)
+    {
+      strncpy(G_runtime->worker[idx].result_msg, "Already on",
+              BUF_LEN_WORKER_RESULT) ;
+      G_runtime->worker[idx].result_code = 400 ;
+    }
+    else
+    {
+      strncpy(G_runtime->worker[idx].result_msg, "Turning on",
+              BUF_LEN_WORKER_RESULT) ;
+      G_runtime->worker[idx].result_code = 200 ;
+      G_runtime->utask[slot].result[0].i_value = 1 ;
+    }
+  }
+  else
+  if (strcmp(action, "off") == 0)
+  {
+    if (G_runtime->utask[slot].result[0].i_value == 0)
+    {
+      strncpy(G_runtime->worker[idx].result_msg, "Already off",
+              BUF_LEN_WORKER_RESULT) ;
+      G_runtime->worker[idx].result_code = 400 ;
+    }
+    else
+    {
+      strncpy(G_runtime->worker[idx].result_msg, "Turning off",
+              BUF_LEN_WORKER_RESULT) ;
+      G_runtime->worker[idx].result_code = 200 ;
+      G_runtime->utask[slot].result[0].i_value = 0 ;
+    }
+  }
+  else
+  {
+    strncpy(G_runtime->worker[idx].result_msg, "Invalid action\r\n",
+            BUF_LEN_WORKER_RESULT) ;
+    G_runtime->worker[idx].result_code = 400 ;
+    return ;
+  }
 }
 
 /*
@@ -118,6 +178,21 @@ void ft_relay(S_UserThread *self)
     self->result[1].result_type = UTHREAD_RESULT_INT ;
     self->result[1].i_value = 0 ;                       // auto off time left
     self->state = UTHREAD_RUNNING ;
+
+    if (G_runtime->config.debug)
+      Serial.printf("DEBUG: ft_relay() pin:%d started.\r\n", td->pin) ;
+  }
+  td = (S_td_relay*) self->malloc_buf ;
+
+  // if we've been told to shutdown, turn off the relay first
+
+  if (self->state == UTHREAD_WRAPUP)
+  {
+    if (G_runtime->config.debug)
+      Serial.printf("DEBUG: ft_relay() wrapup, relay off.\r\n") ;
+    f_relay_off(td->pin) ;
+    self->state = UTHREAD_STOPPED ;
+    return ;
   }
 
   // if we're off but have been commanded on
