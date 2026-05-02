@@ -1,7 +1,9 @@
 /*
    This function is called from "f_action()". If no arguments are provided,
    we print the help message, otherwise we identify the "ft_relay()" thread
-   specified and directly modify its "result[0].i_value".
+   specified and directly modify its "result[0].i_value" to manage relay state.
+   In addition, we update its "result[2].ll_value" to indicate the time of the
+   "on" command.
 */
 
 void f_relay_cmd(int idx)
@@ -38,6 +40,16 @@ void f_relay_cmd(int idx)
     return ;
   }
 
+  // if relay is in a fault state, don't proceed
+
+  if (G_runtime->utask[slot].result[0].i_value < 0)
+  {
+    strncpy(G_runtime->worker[idx].result_msg, "Relay in a fault state.\r\n",
+            BUF_LEN_WORKER_RESULT) ;
+    G_runtime->worker[idx].result_code = 400 ;
+    return ;
+  }
+
   // handle the supplied "on" or "off" action
 
   if (strcmp(action, "on") == 0)
@@ -46,7 +58,7 @@ void f_relay_cmd(int idx)
     {
       strncpy(G_runtime->worker[idx].result_msg, "Already on",
               BUF_LEN_WORKER_RESULT) ;
-      G_runtime->worker[idx].result_code = 400 ;
+      G_runtime->worker[idx].result_code = 200 ;
     }
     else
     {
@@ -55,6 +67,7 @@ void f_relay_cmd(int idx)
       G_runtime->worker[idx].result_code = 200 ;
       G_runtime->utask[slot].result[0].i_value = 1 ;
     }
+    G_runtime->utask[slot].result[2].ll_value = esp_timer_get_time() ;
   }
   else
   if (strcmp(action, "off") == 0)
@@ -131,9 +144,8 @@ void f_relay_off(int pin)
 
 struct td_relay {
   int pin ;             // GPIO pin which controls the relay
-  int timeout_secs ;    // turn off if not (re)commanded on within this time
   int cur_state ;       // whether the relay is currently on
-  long long on_time ;   // timestamp of when relay was turned on
+  long long timeout_secs ; // turn off if not (re)commanded on within this time
 } ;
 typedef struct td_relay S_td_relay ;
 
@@ -177,7 +189,14 @@ void ft_relay(S_UserThread *self)
     self->result[1].l_data[0] = "remaining" ;
     self->result[1].result_type = UTHREAD_RESULT_INT ;
     self->result[1].i_value = 0 ;                       // auto off time left
+    self->result[2].l_name[0] = "ts_last_command" ;
+    self->result[2].l_data[0] = "on" ;
+    self->result[2].result_type = UTHREAD_RESULT_LONGLONG ;
+    self->result[2].ll_value = 0 ;                      // last "on" command
+
     self->state = UTHREAD_RUNNING ;
+    snprintf(self->status, BUF_LEN_UTHREAD_STATUS, "pin:%d timeout_secs:%lld",
+             td->pin, td->timeout_secs) ;
 
     if (G_runtime->config.debug)
       Serial.printf("DEBUG: ft_relay() pin:%d started.\r\n", td->pin) ;
@@ -201,7 +220,6 @@ void ft_relay(S_UserThread *self)
   {
     f_relay_on(td->pin) ;
     td->cur_state = 1 ;
-    td->on_time = esp_timer_get_time() ;
   }
 
   // if we're on but have been commanded off
@@ -210,13 +228,31 @@ void ft_relay(S_UserThread *self)
   {
     f_relay_off(td->pin) ;
     td->cur_state = 0 ;
-    self->result[1].i_value = 0 ;
+    self->result[1].i_value = 0 ;               // disable auto off time left
   }
 
   // if we're on, check if it's time to automatically turn off (ie, fault)
 
-
-
+  if (td->cur_state == 1)
+  {
+    long long now = esp_timer_get_time() ;
+    long long off_time = self->result[2].ll_value +
+                         (td->timeout_secs * 1000000) ;
+    long long remaining = (off_time - now) / 1000000 ;
+    if (remaining < 0)                          // enter fault state
+    {
+      f_relay_off(td->pin) ;
+      td->cur_state = -1 ;
+      self->result[0].i_value = -1 ;            // relay state (ie, fault)
+      self->result[1].i_value = -1 ;            // auto off time left
+      strncpy(self->status, "Fault state", BUF_LEN_UTHREAD_STATUS) ;
+      if (G_runtime->config.debug)
+        Serial.printf("DEBUG: ft_relay() '%s' in a fault state.\r\n",
+                      self->name) ;
+    }
+    else
+      self->result[1].i_value = remaining ;
+  }
 
   delay(RELAY_DELAY_MSEC) ;
 }
