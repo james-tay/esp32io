@@ -565,11 +565,11 @@ void f_cam_cmd(int idx)
   if (count < 2)
   {
     strncpy(G_runtime->worker[idx].result_msg,
-      "init <mhz>                       XCLK frequency (8-20)\r\n"
-      "set <key> <value>                set camera parameter\r\n"
-      "show                             show camera parameters\r\n"
-      "reg_get <addr> <mask>            get a camera register\r\n"
-      "reg_set <addr> <mask> <value>    set a camera register\r\n",
+      "cam init <mhz>                       XCLK frequency (8-20)\r\n"
+      "cam set <key> <value>                set camera parameter\r\n"
+      "cam show                             show camera parameters\r\n"
+      "cam reg_get <addr> <mask>            get a camera register\r\n"
+      "cam reg_set <addr> <mask> <value>    set a camera register\r\n",
       BUF_LEN_WORKER_RESULT) ;
     G_runtime->worker[idx].result_code = 400 ;
     return ;

@@ -14,8 +14,8 @@ void f_relay_cmd(int idx)
   if (f_parse(G_runtime->worker[idx].cmd, tokens, 3) != 3)
   {
     strncpy(G_runtime->worker[idx].result_msg,
-            "<relay_thread> on          turn on a relay\r\n"
-            "<relay_thread> off         turn off a relay\r\n",
+            "relay <relay_thread> on          turn on a relay\r\n"
+            "relay <relay_thread> off         turn off a relay\r\n",
             BUF_LEN_WORKER_RESULT) ;
     G_runtime->worker[idx].result_code = 400 ;
     return ;

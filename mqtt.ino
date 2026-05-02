@@ -251,10 +251,10 @@ void f_mqtt_cmd(int idx)
   if (amt < 2)
   {
     strncpy(G_runtime->worker[idx].result_msg,
-            "connect            connect to MQTT server\r\n"
-            "disconnect         disconnect from MQTT server\r\n"
-            "publish <str>      publish to our default topic\r\n"
-            "status             print our current MQTT status\r\n",
+            "mqtt connect            connect to MQTT server\r\n"
+            "mqtt disconnect         disconnect from MQTT server\r\n"
+            "mqtt publish <str>      publish to our default topic\r\n"
+            "mqtt status             print our current MQTT status\r\n",
             BUF_LEN_WORKER_RESULT) ;
     G_runtime->worker[idx].result_code = 400 ;
     return ;

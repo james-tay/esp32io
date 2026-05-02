@@ -295,6 +295,7 @@ void f_action(int idx)
       "dread <pin>      digital read\r\n"
       "ds18b20 <pin>    poll temperature sensor(s)\r\n"
       "fs ...           filesystem management\r\n"
+      "hcsr04 ...       ultrasonic distance sensor\r\n"
       "hi <pin> [usec]  set a pin high or pulse it high\r\n"
       "ps               threads cpu time consumed\r\n"
       "lo <pin> [usec]  set a pin low or pulse it low\r\n"
@@ -329,6 +330,9 @@ void f_action(int idx)
   else
   if (strcmp(keyword, "ds18b20") == 0)                          // ds18b20
     f_ds18b20_cmd(idx) ;
+  else
+  if (strcmp(keyword, "hcsr04") == 0)                           // hcsr04
+    f_hcsr04_cmd(idx) ;
   else
   if (strcmp(keyword, "hi") == 0)                               // hi
     f_hi_lo_cmd(idx) ;

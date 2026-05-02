@@ -120,14 +120,14 @@ void f_set_cmd(int idx)
   if (f_parse(G_runtime->worker[idx].cmd, tokens, 3) != 3)      // print help
   {
     strncpy(G_runtime->worker[idx].result_msg,
-      "debug            <int>           debug mode\r\n"
-      "init_delay_secs  <int>           delay before running /init.thread\r\n"
-      "mqtt_check_secs  <int>           MQTT connection check interval\r\n"
-      "mqtt_setup       <user>:<pw>@<server>:<port>\r\n"
-      "mqtt_topic       <string>        MQTT publish topic\r\n"
-      "wifi_ssid        <string>        Wifi SSID we connect to\r\n"
-      "wifi_pw          <string>        Wifi SSID password\r\n"
-      "wifi_check_secs  <int>           Wifi connection check interval\r\n",
+      "debug           <int>           debug mode\r\n"
+      "init_delay_secs <int>           delay before running /init.thread\r\n"
+      "mqtt_check_secs <int>           MQTT connection check interval\r\n"
+      "mqtt_setup <user>:<pw>@<server>:<port>  MQTT creds and server\r\n"
+      "mqtt_topic      <string>        MQTT publish topic\r\n"
+      "wifi_ssid       <string>        Wifi SSID we connect to\r\n"
+      "wifi_pw         <string>        Wifi SSID password\r\n"
+      "wifi_check_secs <int>           Wifi connection check interval\r\n",
       BUF_LEN_WORKER_RESULT) ;
     G_runtime->worker[idx].result_code = 400 ;
     return ;

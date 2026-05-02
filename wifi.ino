@@ -168,10 +168,10 @@ void f_wifi_cmd(int idx)
   if (f_parse(G_runtime->worker[idx].cmd, tokens, 2) != 2)
   {
     strncpy(G_runtime->worker[idx].result_msg,
-      "connect          connect to currently configured AP\r\n"
-      "disconnect       disconnect and reset wifi radio\r\n"
-      "scan             search and report all Wifi SSIDs\r\n"
-      "status           prints the current Wifi status\r\n",
+      "wifi connect          connect to currently configured AP\r\n"
+      "wifi disconnect       disconnect and reset wifi radio\r\n"
+      "wifi scan             search and report all Wifi SSIDs\r\n"
+      "wifi status           prints the current Wifi status\r\n",
       BUF_LEN_WORKER_RESULT) ;
     G_runtime->worker[idx].result_code = 400 ;
     return ;
