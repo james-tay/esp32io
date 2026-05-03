@@ -39,6 +39,8 @@ $ ./build.sh compile
 NOTICE: Compiling for esp32:esp32:esp32s3 - c1154c4 - 20260502-225831
 Sketch uses 1089307 bytes (83%) of program storage space. Maximum is 1310720 bytes.
 Global variables use 56180 bytes (17%) of dynamic memory, leaving 271500 bytes for local variables. Maximum is 327680 bytes.
+...
+...
 ```
 
 To flash the ESP32-S3,
@@ -135,6 +137,30 @@ sensor{model="dht22",location="kitchen",measurement="temperature"} 22.700001
 sensor{model="dht22",location="kitchen",measurement="humidity"} 57.200001
 ...
 ```
+
+### Run commands on startup
+
+By default, esp32io only starts user task threads when commanded to. To
+automatically execute commands on boot, create a file called `/init.thread`.
+For example,
+
+```
+$ curl http://<esp32>/v1?cmd=fs+write+/init.thread+ft_utasks:0,/init.cmds
+```
+
+When run, this thread will execute commands listed in the file `/init.cmds`.
+Commands should be semi-colon separated. The following example includes
+commands to start the `env1` thread and then sync the ESP32's clock against an
+NTP server.
+
+```
+$ curl "http://<esp32>/v1?cmd=fs+write+/init.cmds+task+start+env1+;+ntp+time.apple.com
+```
+
+Note that this `/init.thread` is run after some amount of delay after boot.
+See `DEF_INIT_THREAD_START_SECS` in `esp32io.h`. This delay provides a window
+for you to disable the `/init.thread` should commands somehow result in the
+ESP32 getting into a crash loop.
 
 ## Using the ESP32-CAM
 
