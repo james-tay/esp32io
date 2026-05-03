@@ -154,7 +154,7 @@ commands to start the `env1` thread and then sync the ESP32's clock against an
 NTP server.
 
 ```
-$ curl "http://<esp32>/v1?cmd=fs+write+/init.cmds+task+start+env1+;+ntp+time.apple.com
+$ curl "http://<esp32>/v1?cmd=fs+write+/init.cmds+task+start+env1+;+ntp+time.apple.com"
 ```
 
 Note that this `/init.thread` is run after some amount of delay after boot.
