@@ -136,3 +136,29 @@ sensor{model="dht22",location="kitchen",measurement="humidity"} 57.200001
 ...
 ```
 
+## Using the ESP32-CAM
+
+By default, the camera subsystem is not initialized (to save heap memory). To
+bring the camera subsystem online it has to be initialized and the desired
+camera clock (mhz) supplied. For the best wifi stability, this should be set
+to `8` mhz, and may be increased for better frame rate performance. For
+example,
+
+```
+$ curl http://<esp32-cam>/v1?cmd=cam+init+8
+```
+
+To reduce the size of the data transferred, it may be desirable to reduce the
+framesize (the various supported capture resolutions are listed in the
+`f_framesize_id()` function in `cam.ino`). For example,
+
+```
+$ curl http://<esp32-cam>/v1?cmd=cam+set+framesize+sxga
+```
+
+At this point, a (jpeg) camera frame can be accessed at,
+
+```
+wget -O sample.jpg http://<esp32-cam>/cam
+```
+
