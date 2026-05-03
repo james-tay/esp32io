@@ -177,6 +177,90 @@ void f_fs_read(int idx, char *filename)
 }
 
 /*
+   This function is called from "f_fs_recv()" or "f_fs_send()". Our job is to
+   setup a listening TCP socket on "port". On success, the socket descriptor
+   is returned. If something went wrong, we'll write the error into the
+   "idx" worker thread's "result_msg" and "result_code", and return -1.
+*/
+
+int f_fs_listen_socket(int idx, int port)
+{
+  int listen_sd = socket(AF_INET, SOCK_STREAM, IPPROTO_IP) ;
+  if (listen_sd < 0)
+  {
+    strncpy(G_runtime->worker[idx].result_msg, "socket() failed.\r\n",
+            BUF_LEN_WORKER_RESULT) ;
+    G_runtime->worker[idx].result_code = 500 ;
+    return(-1) ;
+  }
+
+  int reuse = 1 ; // allow quick re-bind()'ing of this port
+  setsockopt(listen_sd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(int)) ;
+
+  struct sockaddr_in addr ;
+  memset(&addr, 0, sizeof(addr)) ;
+  addr.sin_family = AF_INET ;
+  addr.sin_addr.s_addr = INADDR_ANY ;
+  addr.sin_port = htons(port) ;
+  if (bind(listen_sd, (const struct sockaddr*) &addr, sizeof(addr)) < 0)
+  {
+    close(listen_sd) ;
+    strncpy(G_runtime->worker[idx].result_msg, "bind() failed.\r\n",
+            BUF_LEN_WORKER_RESULT) ;
+    G_runtime->worker[idx].result_code = 500 ;
+    return(-1) ;
+  }
+  if (listen (listen_sd, 1) != 0)
+  {
+    close(listen_sd) ;
+    strncpy(G_runtime->worker[idx].result_msg, "listen() failed.\r\n",
+            BUF_LEN_WORKER_RESULT) ;
+    G_runtime->worker[idx].result_code = 500 ;
+    return(-1) ;
+  }
+  return(listen_sd) ;
+}
+
+/*
+   This function is called from "f_fs_cmd()" with a worker thread with "idx".
+   Our job is to listen on the TCP "port" for an incoming client. Any data
+   received is written to "filename".
+*/
+
+void f_fs_recv(int idx, char *port_str, char *filename)
+{
+  // sanity check out inputs first
+
+  int fault=0, port ;
+  if (port_str == NULL)
+    fault = 1 ;
+  else
+    port = atoi(port_str) ;
+
+  if ((fault) || (port < 1) || (port > 65535) || (filename == NULL) ||
+      (filename[0] != '/') || (strlen(filename) > DEF_MAX_FILENAME_LEN))
+  {
+    strncpy(G_runtime->worker[idx].result_msg, "Invalid usage.\r\n",
+            BUF_LEN_WORKER_RESULT) ;
+    G_runtime->worker[idx].result_code = 400 ;
+    return ;
+  }
+
+  /* setup a listening TCP socket and expect a client to connect to it */
+
+  int listen_sd = f_fs_listen_socket(idx, port) ;
+  if (listen_sd < 0)
+    return ;
+
+
+
+
+
+
+  close(listen_sd) ;
+}
+
+/*
    This function is caled from "f_fs_cmd()" by worker thread "idx". Our job
    is to remove "filename". On completion, we'll set the worker thread's
    "result_msg" and "result_code" accordingly.
@@ -204,6 +288,13 @@ void f_fs_rm(int idx, char *filename)
              "Cannot remove '%s'.\r\n", filename) ;
     G_runtime->worker[idx].result_code = 500 ;
   }
+}
+
+void f_fs_send(int idx, char *port_str, char *filename)
+{
+
+
+
 }
 
 /*
@@ -283,7 +374,7 @@ void f_fs_cmd(int idx)
   // parse the "fs ..." command, or print help. Note that we prepare for the
   // longest possible command, which is "fs write /file content", ie 4x tokens.
 
-  char *tokens[4], *cmd=NULL, *key=NULL, *filename=NULL, *content=NULL ;
+  char *tokens[4], *cmd=NULL, *key=NULL, *arg1=NULL, *arg2=NULL ;
   memset(tokens, 0, sizeof(char*) * 4) ;
   if (f_parse(G_runtime->worker[idx].cmd, tokens, 4) == 1)
   {
@@ -294,7 +385,9 @@ void f_fs_cmd(int idx)
       "fs mv <src> <dst>        move (rename) a file\r\n"
       "fs partinfo              show partition layout\r\n"
       "fs read <file>           show contents of a file\r\n"
+      "fs recv <port> <file>    save incoming data on <port> to file\r\n"
       "fs rm <file>             removes a file\r\n"
+      "fs send <port> <file>    write <file> to TCP client on <port>\r\n"
       "fs write <file> <line>   write one line to a file\r\n",
       BUF_LEN_WORKER_RESULT) ;
     G_runtime->worker[idx].result_code = 400 ;
@@ -302,8 +395,8 @@ void f_fs_cmd(int idx)
   }
   cmd = tokens[0] ;
   key = tokens[1] ;
-  filename = tokens[2] ;
-  content = tokens[3] ;
+  arg1 = tokens[2] ;
+  arg2 = tokens[3] ;
 
   if (strcmp(key, "format") == 0)                               // "format"
   {
@@ -336,7 +429,7 @@ void f_fs_cmd(int idx)
   if (strcmp(key, "mv") == 0)                                   // "mv"
   {
     if (f_fs_online(idx))
-      f_fs_mv(idx, filename, content) ;
+      f_fs_mv(idx, arg1, arg2) ;
   }
   else
   if (strcmp(key, "partinfo") == 0)                             // "partinfo"
@@ -348,19 +441,31 @@ void f_fs_cmd(int idx)
   if (strcmp(key, "read") == 0)                                 // "read"
   {
     if (f_fs_online(idx))
-      f_fs_read(idx, filename) ;
+      f_fs_read(idx, arg1) ;
+  }
+  else
+  if (strcmp(key, "recv") == 0)                                 // recv
+  {
+    if (f_fs_online(idx))
+      f_fs_recv(idx, arg1, arg2) ;
   }
   else
   if (strcmp(key, "rm") == 0)                                   // "rm"
   {
     if (f_fs_online(idx))
-      f_fs_rm(idx, filename) ;
+      f_fs_rm(idx, arg1) ;
+  }
+  else
+  if (strcmp(key, "send") == 0)                                 // "send"
+  {
+    if (f_fs_online(idx))
+      f_fs_send(idx, arg1, arg2) ;
   }
   else
   if (strcmp(key, "write") == 0)                                // "write"
   {
     if (f_fs_online(idx))
-      f_fs_write(idx, filename, content) ;
+      f_fs_write(idx, arg1, arg2) ;
   }
   else                                  // user specified an invalid "key"
   {
