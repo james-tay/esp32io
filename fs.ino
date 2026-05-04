@@ -274,23 +274,77 @@ void f_fs_recv(int idx, char *port_str, char *filename)
     return ;
   }
 
-  /* setup a listening TCP socket and expect a client to connect to it */
+  // setup a listening TCP socket and expect a client to connect to it
 
   int listen_sd = f_fs_listen_socket(idx, port) ;
   if (listen_sd < 0)
     return ;
 
-  /* wait for a client to connect, wait up to DEF_FS_XFER_TIMEOUT_SECS */
+  // wait for a client to connect, wait up to DEF_FS_XFER_TIMEOUT_SECS
 
   int client_sd = f_fs_wait_for_client(idx, listen_sd) ;
   close(listen_sd) ;
   if (client_sd < 0)
     return ;
 
+  // open a temporary file for writing, if anything goes wrong, discard it
+
+  char tmp_file[DEF_MAX_FILENAME_LEN] ;
+  snprintf(tmp_file, DEF_MAX_FILENAME_LEN, "%s~", filename) ;
+  File f = SPIFFS.open(tmp_file, "w") ;
+  if (!f)
+  {
+    strncpy(G_runtime->worker[idx].result_msg,
+            "Cannot open file for writing.\r\n", BUF_LEN_WORKER_RESULT) ;
+    G_runtime->worker[idx].result_code = 500 ;
+    close(client_sd) ;
+    return ;
+  }
+
+  // read data from "client_sd", but disconnect if it idles too long
+
+  int total_bytes=0, amt ;
+  char buf[BUF_LEN_LINE] ;
+  fd_set rfds ;
+  struct timeval tv ;
+
+  while (1)
+  {
+    tv.tv_sec = DEF_FS_XFER_TIMEOUT_SECS ;
+    tv.tv_usec = 0 ;
+    FD_ZERO(&rfds) ;
+    FD_SET(client_sd, &rfds) ;
+    if (select(client_sd + 1, &rfds, NULL, NULL, &tv) < 1)
+    {
+      strncpy(G_runtime->worker[idx].result_msg, "Client read timed out.\r\n",
+              BUF_LEN_WORKER_RESULT) ;
+      G_runtime->worker[idx].result_code = 500 ;
+      break ;                                   // client read timed out
+    }
+    amt = read(client_sd, buf, BUF_LEN_LINE) ;
+    if (amt < 1)
+      break ;                                   // client closed connection
+
+    if (f.write((const uint8_t*)buf, amt) != amt)
+    {
+      snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+               "Failed after writing %d bytes.\r\n", total_bytes) ;
+      G_runtime->worker[idx].result_code = 500 ;
+      close(client_sd) ;
+      f.close() ;
+      return ;                                  // write() to file failed
+    }
+    total_bytes = total_bytes + amt ;
+  }
+  f.close() ;
+
+  // rename "tmp_file" to the intended "filename"
 
 
 
-
+  snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+           "Received %d bytes from client.\r\n", total_bytes) ;
+  G_runtime->worker[idx].result_code = 200 ;
   close(client_sd) ;
 }
 
