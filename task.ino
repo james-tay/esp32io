@@ -252,7 +252,7 @@ void f_task_create(int idx, int slot, int core, char *name)
   if (xTaskCreatePinnedToCore (
         f_user_thread_lifecycle,        // function to run
         name,                           // thread's name
-        DEF_STACKSIZE_UTHREAD,          // thread's stacksize
+        G_runtime->config.utask_stacksize, // thread's stacksize
         &G_runtime->utask[slot],        // param to pass into thread
         DEF_USER_THREAD_PRIORITY,       // priority (higher is more important)
         &G_runtime->utask[slot].tid,    // task handle

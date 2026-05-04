@@ -421,6 +421,7 @@ void setup()
   G_runtime->config.mqtt_check_secs = DEF_MQTT_CHECK_INT_SECS ;
   G_runtime->config.init_delay_secs = DEF_INIT_THREAD_START_SECS ;
   G_runtime->config.worker_threads = DEF_MAX_WORKER_THREADS ;
+  G_runtime->config.utask_stacksize = DEF_STACKSIZE_UTHREAD ;
   G_runtime->initial_heap_bytes = initial_heap_bytes ;
 
   // print out some info to show that we're booting up

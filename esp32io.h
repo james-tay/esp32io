@@ -40,6 +40,7 @@
 #define DEF_INIT_THREAD_START_SECS 60   // autorun "/init.thread" at this time
 #define DEF_ANON_CALLER -255            // anonymous worker thread "caller"
 #define DEF_UTHREAD_CALLER_OFFSET 1000  // user task thread's "caller" offset
+#define DEF_FS_XFER_TIMEOUT_SECS 10     // "fs send/recv ..." client timeout
 
 // stack sizes for various threads
 
@@ -216,6 +217,7 @@ struct config_data {
 
   int init_delay_secs ;                 // secs before running "/init.thread"
   int worker_threads ;                  // used only once in "setup()"
+  int utask_stacksize ;                 // user task thread's stack size
   int debug ;                           // 0=none, 1=debug
 
 } ; typedef struct config_data S_ConfigData ;

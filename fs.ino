@@ -222,6 +222,34 @@ int f_fs_listen_socket(int idx, int port)
 }
 
 /*
+   This function is called from "f_fs_recv()" or "f_fs_send()". Our job is to
+   wait for up to DEF_FS_XFER_TIMEOUT_SECS, for an incoming TCP client on
+   "listen_sd". On success, we'll return the client's socket descriptor, or
+   -1 if something went wrong (probably a timeout).
+*/
+
+int f_fs_wait_for_client(int idx, int listen_sd)
+{
+  struct timeval tv ;
+  fd_set rfds ;
+  tv.tv_sec = DEF_FS_XFER_TIMEOUT_SECS ;
+  tv.tv_usec = 0 ;
+  FD_ZERO(&rfds) ;
+  FD_SET(listen_sd, &rfds) ;
+  if (select(listen_sd + 1, &rfds, NULL, NULL, &tv) < 1)
+  {
+    strncpy(G_runtime->worker[idx].result_msg,
+            "Timed out waiting for client.\r\n", BUF_LEN_WORKER_RESULT) ;
+    G_runtime->worker[idx].result_code = 500 ;
+    return(-1) ;
+  }
+
+  // if we got here, it means there was activity on "listen_sd"
+
+  return(accept(listen_sd, NULL, NULL)) ;
+}
+
+/*
    This function is called from "f_fs_cmd()" with a worker thread with "idx".
    Our job is to listen on the TCP "port" for an incoming client. Any data
    received is written to "filename".
@@ -252,12 +280,18 @@ void f_fs_recv(int idx, char *port_str, char *filename)
   if (listen_sd < 0)
     return ;
 
+  /* wait for a client to connect, wait up to DEF_FS_XFER_TIMEOUT_SECS */
 
-
-
-
-
+  int client_sd = f_fs_wait_for_client(idx, listen_sd) ;
   close(listen_sd) ;
+  if (client_sd < 0)
+    return ;
+
+
+
+
+
+  close(client_sd) ;
 }
 
 /*

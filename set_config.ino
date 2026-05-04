@@ -102,6 +102,10 @@ void f_load_config()
     Serial.printf("BOOT: from /worker_threads.cfg -> %d.\r\n",
                   G_runtime->config.worker_threads) ;
   }
+
+  if (f_load_int("/utask_stacksize.cfg", &G_runtime->config.utask_stacksize))
+    Serial.printf("BOOT: from /utask_stacksize.cfg -> %d.\r\n",
+                  G_runtime->config.utask_stacksize) ;
 }
 
 /*
@@ -125,6 +129,7 @@ void f_set_cmd(int idx)
       "mqtt_check_secs <int>           MQTT connection check interval\r\n"
       "mqtt_setup <user>:<pw>@<server>:<port>  MQTT creds and server\r\n"
       "mqtt_topic      <string>        MQTT publish topic\r\n"
+      "utask_stacksize <int>           User task thread stacksize\r\n"
       "wifi_ssid       <string>        Wifi SSID we connect to\r\n"
       "wifi_pw         <string>        Wifi SSID password\r\n"
       "wifi_check_secs <int>           Wifi connection check interval\r\n",
@@ -173,6 +178,13 @@ void f_set_cmd(int idx)
   {
     memset(G_runtime->config.mqtt_topic, 0, BUF_LEN_MQTT_TOPIC) ;
     strncpy(G_runtime->config.mqtt_topic, value, BUF_LEN_MQTT_TOPIC-1) ;
+  }
+  else
+  if (strcmp(key, "utask_stacksize") == 0)
+  {
+    G_runtime->config.utask_stacksize = atoi(value) ;
+    snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+             "%s -> %d.\r\n", key, G_runtime->config.utask_stacksize) ;
   }
   else
   if (strcmp(key, "wifi_ssid") == 0)
