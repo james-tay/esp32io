@@ -385,9 +385,64 @@ void f_fs_rm(int idx, char *filename)
 
 void f_fs_send(int idx, char *port_str, char *filename)
 {
+  // sanity check out inputs first
 
+  int fault=0, port ;
+  if (port_str == NULL)
+    fault = 1 ;
+  else
+    port = atoi(port_str) ;
 
+  if ((fault) || (port < 1) || (port > 65535) || (filename == NULL) ||
+      (filename[0] != '/') || (strlen(filename) > DEF_MAX_FILENAME_LEN))
+  {
+    strncpy(G_runtime->worker[idx].result_msg, "Invalid usage.\r\n",
+            BUF_LEN_WORKER_RESULT) ;
+    G_runtime->worker[idx].result_code = 400 ;
+    return ;
+  }
 
+  // if the requested file doesn't exist, give up now
+
+  if (SPIFFS.exists(filename) == false)
+  {
+    strncpy(G_runtime->worker[idx].result_msg, "No such file.\r\n",
+            BUF_LEN_WORKER_RESULT) ;
+    G_runtime->worker[idx].result_code = 400 ;
+    return ;
+  }
+
+  // wait for a client to connect, wait up to DEF_FS_XFER_TIMEOUT_SECS
+
+  int client_sd = f_fs_get_listen_client(idx, port) ;
+  if (client_sd < 0)
+    return ;
+  if (G_runtime->config.debug)
+    Serial.printf("DEBUG: f_fs_send() TCP client connected on sd %d.\r\n",
+                  client_sd) ;
+
+  // now open "filename" and send it into "client_sd"
+
+  int total_bytes = 0 ;
+  char buf[BUF_LEN_LINE] ;
+  File f = SPIFFS.open(filename, "r") ;
+  while (1)
+  {
+    int amt = f.readBytes(buf, BUF_LEN_LINE) ;
+    if (amt > 0)
+    {
+      write(client_sd, buf, amt) ;
+      total_bytes = total_bytes + amt ;
+    }
+    else
+      break ;
+  }
+
+  f.close() ;
+  close(client_sd) ;
+  snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+           "Sent %d bytes.\r\n", total_bytes) ;
+  G_runtime->worker[idx].result_code = 200 ;
 }
 
 /*
