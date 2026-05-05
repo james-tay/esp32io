@@ -178,12 +178,14 @@ void f_fs_read(int idx, char *filename)
 
 /*
    This function is called from "f_fs_recv()" or "f_fs_send()". Our job is to
-   setup a listening TCP socket on "port". On success, the socket descriptor
-   is returned. If something went wrong, we'll write the error into the
-   "idx" worker thread's "result_msg" and "result_code", and return -1.
+   setup a listening TCP socket on "port". Wait for an incoming TCP client to
+   connect (don't wait forever) and then return the client socket descriptor.
+   The listening socket is always closed before we return. If something goes
+   wrong, write the error into the "idx" worker thread's "result_msg" and
+   "result_code", and return -1.
 */
 
-int f_fs_listen_socket(int idx, int port)
+int f_fs_get_listen_client(int idx, int port)
 {
   int listen_sd = socket(AF_INET, SOCK_STREAM, IPPROTO_IP) ;
   if (listen_sd < 0)
@@ -204,32 +206,23 @@ int f_fs_listen_socket(int idx, int port)
   addr.sin_port = htons(port) ;
   if (bind(listen_sd, (const struct sockaddr*) &addr, sizeof(addr)) < 0)
   {
-    close(listen_sd) ;
     strncpy(G_runtime->worker[idx].result_msg, "bind() failed.\r\n",
             BUF_LEN_WORKER_RESULT) ;
     G_runtime->worker[idx].result_code = 500 ;
+    close(listen_sd) ;
     return(-1) ;
   }
   if (listen (listen_sd, 1) != 0)
   {
-    close(listen_sd) ;
     strncpy(G_runtime->worker[idx].result_msg, "listen() failed.\r\n",
             BUF_LEN_WORKER_RESULT) ;
     G_runtime->worker[idx].result_code = 500 ;
+    close(listen_sd) ;
     return(-1) ;
   }
-  return(listen_sd) ;
-}
 
-/*
-   This function is called from "f_fs_recv()" or "f_fs_send()". Our job is to
-   wait for up to DEF_FS_XFER_TIMEOUT_SECS, for an incoming TCP client on
-   "listen_sd". On success, we'll return the client's socket descriptor, or
-   -1 if something went wrong (probably a timeout).
-*/
+  // now wait for an incoming client, but don't wait forever
 
-int f_fs_wait_for_client(int idx, int listen_sd)
-{
   struct timeval tv ;
   fd_set rfds ;
   tv.tv_sec = DEF_FS_XFER_TIMEOUT_SECS ;
@@ -241,12 +234,23 @@ int f_fs_wait_for_client(int idx, int listen_sd)
     strncpy(G_runtime->worker[idx].result_msg,
             "Timed out waiting for client.\r\n", BUF_LEN_WORKER_RESULT) ;
     G_runtime->worker[idx].result_code = 500 ;
+    close(listen_sd) ;
     return(-1) ;
   }
 
   // if we got here, it means there was activity on "listen_sd"
 
-  return(accept(listen_sd, NULL, NULL)) ;
+  int client_sd = accept(listen_sd, NULL, NULL) ;
+  close(listen_sd) ;
+
+  if (client_sd < 0)
+  {
+    strncpy(G_runtime->worker[idx].result_msg,
+            "accept() failed for client.\r\n", BUF_LEN_WORKER_RESULT) ;
+    G_runtime->worker[idx].result_code = 500 ;
+    return(-1) ;
+  }
+  return(client_sd) ;
 }
 
 /*
@@ -274,18 +278,14 @@ void f_fs_recv(int idx, char *port_str, char *filename)
     return ;
   }
 
-  // setup a listening TCP socket and expect a client to connect to it
-
-  int listen_sd = f_fs_listen_socket(idx, port) ;
-  if (listen_sd < 0)
-    return ;
-
   // wait for a client to connect, wait up to DEF_FS_XFER_TIMEOUT_SECS
 
-  int client_sd = f_fs_wait_for_client(idx, listen_sd) ;
-  close(listen_sd) ;
+  int client_sd = f_fs_get_listen_client(idx, port) ;
   if (client_sd < 0)
     return ;
+  if (G_runtime->config.debug)
+    Serial.printf("DEBUG: f_fs_recv() TCP client connected on sd %d.\r\n",
+                  client_sd) ;
 
   // open a temporary file for writing, if anything goes wrong, discard it
 
@@ -324,6 +324,8 @@ void f_fs_recv(int idx, char *port_str, char *filename)
     amt = read(client_sd, buf, BUF_LEN_LINE) ;
     if (amt < 1)
       break ;                                   // client closed connection
+    if (G_runtime->config.debug)
+      Serial.printf("DEBUG: f_fs_recv() got %d bytes from client.\r\n", amt) ;
 
     if (f.write((const uint8_t*)buf, amt) != amt)
     {
@@ -338,9 +340,12 @@ void f_fs_recv(int idx, char *port_str, char *filename)
   }
   f.close() ;
 
-  // rename "tmp_file" to the intended "filename"
+  // rename "tmp_file" to the intended "filename". Unfortunately on SPIFFS,
+  // existing files must be deleted first.
 
-
+  if (SPIFFS.exists(filename))
+    SPIFFS.remove(filename) ;
+  SPIFFS.rename(tmp_file, filename) ;
 
   snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
            "Received %d bytes from client.\r\n", total_bytes) ;
