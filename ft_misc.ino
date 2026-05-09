@@ -381,7 +381,7 @@ void ft_utasks(S_UserThread *self)
   }
 
   long long ts_start = esp_timer_get_time() ;
-  cur_cmd = strtok_r(cmd_buf, ";", &p) ;
+  cur_cmd = f_get_statement(cmd_buf, &p) ;
   while (cur_cmd != NULL)
   {
     // do a "trim()" on "cur_cmd", ie, remove white space
@@ -425,7 +425,7 @@ void ft_utasks(S_UserThread *self)
         G_runtime->worker[tid].state = W_IDLE ;         // release worker
       }
     }
-    cur_cmd = strtok_r(NULL, ";", &p) ;                 // move to next command
+    cur_cmd = f_get_statement(NULL, &p) ;               // move to next command
   }
 
   long long ts_end = esp_timer_get_time() ;

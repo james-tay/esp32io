@@ -1,4 +1,52 @@
 /*
+   This is a replacement for "strtok_r()" and is parses a multi-statement
+   "buffer". A statement may be newline (1st choice) or semi-colon (2nd choice)
+   separated. Like "strtok_r()", the caller supplies a string "buffer" and a
+   opaque pointer "ref" for us to use. This function NULL terminates the first
+   statement and returns a pointer to the start of the statement. In subsequent
+   calls, "buffer" must be NULL. This function returns NULL when no more
+   statements remain in the original "buffer".
+*/
+
+char *f_get_statement(char *buffer, char **ref)
+{
+  char *separator ;
+  long long offset ;
+
+  // if "buffer" is not NULL, this is our first call, initialize "ref" and
+  // then call ourself with "buffer" as NULL.
+
+  if (buffer)
+  {
+    if (strlen(buffer) < 1)
+      return(NULL) ;                    // surprise ! an empty string !
+    *ref = buffer ;
+    return(f_get_statement(NULL, ref)) ;
+  }
+
+  // if we're here, the supplied "buffer" is NULL, we'll work on "ref"
+
+  char *start_p = *ref ;                // save our "start" position
+  if ((*ref == NULL) || (strlen(*ref) < 1))
+    return(NULL) ;                      // no more statements
+
+  separator = strstr(start_p, "\n") ;   // try look for newline first
+  if (separator == NULL)
+    separator = strstr(start_p, ";") ;  // try look for semi-colon
+
+  if (separator == NULL)                // this is the last statement
+  {
+    *ref = NULL ;                       // not possible to continue
+    return(start_p) ;
+  }
+
+  offset = separator - start_p ;        // where to NULL terminate statement
+  start_p[offset] = 0 ;
+  *ref = start_p + offset + 1 ;         // move to next potential statement
+  return(start_p) ;
+}
+
+/*
    This is a convenience function which reads from "filename", writing up to
    "max_size" bytes into "buf". On success the number of bytes is returned,
    otherwise -1 to indicate something went wrong (probably no such file).
