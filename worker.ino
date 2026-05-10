@@ -297,6 +297,7 @@ void f_action(int idx)
       "fs ...           filesystem management\r\n"
       "hcsr04 ...       ultrasonic distance sensor\r\n"
       "hi <pin> [usec]  set a pin high or pulse it high\r\n"
+      "i2c ...          interact with I2C devices\r\n"
       "ps               threads cpu time consumed\r\n"
       "lo <pin> [usec]  set a pin low or pulse it low\r\n"
       "mqtt ...         manage MQTT\r\n"
@@ -339,6 +340,9 @@ void f_action(int idx)
   else
   if (strcmp(keyword, "fs") == 0)                               // fs
     f_fs_cmd(idx) ;
+  else
+  if (strcmp(keyword, "i2c") == 0)                              // i2c
+    f_i2c_cmd(idx) ;
   else
   if (strcmp(keyword, "ps") == 0)                               // ps
     f_ps_cmd(idx) ;

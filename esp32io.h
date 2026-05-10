@@ -6,6 +6,7 @@
 
 // third party libraries
 
+#include <Wire.h>
 #include <OneWire.h>
 #include <PubSubClient.h>
 
