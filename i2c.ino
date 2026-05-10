@@ -1,13 +1,93 @@
 /*
-   This function is called from "f_i2c_cmd()". Our job is to initialize the
-   ESP32's I2C hardware by configuring the specified "sda" and "scl" pins.
+   This is a general purpose function which reads "len" bytes into "buf" from
+   an I2C device address "dev" and register address "addr". Recall that to
+   perform a read, we "write" to the specified address and then read off a
+   certain number of bytes. The total number of bytes read is returned.
 */
 
-void f_i2c_init(int idx, int sda, int scl)
+int i2c_io_read(unsigned char dev, unsigned char addr,
+                unsigned char *buf, int len)
 {
+  int total_read=0 ;
+  unsigned char *p=buf ;
+
+  Wire.beginTransmission(dev) ;
+  Wire.write(addr) ;
+  Wire.endTransmission() ;
+  Wire.requestFrom(dev, len) ;
+
+  while ((total_read < len) && (Wire.available() > 0))
+  {
+    *p = Wire.read() ;
+    total_read++ ;
+    p++ ;
+  }
+  return(total_read) ;
+}
+
+/*
+   This function is called from "f_i2c_cmd()" by worker thread "idx". Our job
+   is to read "num_bytes" at "hex_addr" from the I2C device "hex_dev". The
+   bytes read are printed as hex.
+*/
+
+void f_i2c_read_cmd(int idx, char *hex_dev, char *hex_addr, int num_bytes)
+{
+  unsigned char buf[DEF_I2C_READ_BYTES] ;
+
+  if (num_bytes < 0)
+    num_bytes = 0 ;
+  if (num_bytes > DEF_I2C_READ_BYTES)
+    num_bytes = DEF_I2C_READ_BYTES ;
+
+  // before we call "i2c_io_read()", we need to convert the hex strings
+
+  unsigned char dev_value = (unsigned char) strtoul(hex_dev, NULL, 16) ;
+  unsigned char addr_value = (unsigned char) strtoul(hex_addr, NULL, 16) ;
+  int amt = i2c_io_read(dev_value, addr_value, buf, num_bytes) ;
+
+  // now dress up "buf" as hex in "result_msg"
+
+  snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+           "Read %d bytes: ", amt) ;
+  int remainder = BUF_LEN_WORKER_RESULT -
+                  strlen(G_runtime->worker[idx].result_msg) ;
+  char *p = G_runtime->worker[idx].result_msg +
+            strlen(G_runtime->worker[idx].result_msg) ;
+  for (int i=0 ; i < amt ; i++)
+  {
+    snprintf(p, remainder, "%02x ", buf[i]) ;
+    p = p + 3 ;
+    remainder = remainder - 3 ;
+  }
+  strncat(G_runtime->worker[idx].result_msg, "\r\n", remainder) ;
+
+  if (amt == num_bytes)
+    G_runtime->worker[idx].result_code = 200 ;
+  else
+    G_runtime->worker[idx].result_code = 500 ;
+}
+
+/*
+   This function is called from "f_i2c_cmd()" by worker thread "idx". Our job
+   is to initialize the ESP32's I2C hardware by configuring the specified "sda"
+   and "scl" pins.
+*/
+
+void f_i2c_init_cmd(int idx, int sda, int scl)
+{
+  if (Wire.getClock() > 0)
+  {
+    strncpy(G_runtime->worker[idx].result_msg, "Already initialized.\r\n",
+            BUF_LEN_WORKER_RESULT) ;
+    G_runtime->worker[idx].result_code = 400 ;
+    return ;
+  }
+
   Wire.begin(sda, scl) ;
   snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
-           "I2C master using sda:%d scl:%d.\r\n", sda, scl) ;
+           "I2C master using sda:%d scl:%d at %dhz.\r\n",
+           sda, scl, Wire.getClock()) ;
   G_runtime->worker[idx].result_code = 200 ;
 }
 
@@ -18,7 +98,7 @@ void f_i2c_init(int idx, int sda, int scl)
    are reserved.
 */
 
-void f_i2c_scan(int idx)
+void f_i2c_scan_cmd(int idx)
 {
   int remainder ;
   char s[8] ;
@@ -70,21 +150,24 @@ void f_i2c_cmd(int idx)
   if (num_tokens < 2)
   {
     strncpy(G_runtime->worker[idx].result_msg,
-            "i2c read <hexDev> <hexAddr> <numBytes>     read data\r\n"
-            "i2c init <sdaPin> <sclPin>                 setup I2C master\r\n"
-            "i2c scan                                   scan for devices\r\n"
-            "i2c write <hexDev> <hexByte>[,...]         write byte(s)\r\n",
-            BUF_LEN_WORKER_RESULT) ;
+      "i2c read <hexDev> <hexAddr> <numBytes>           read data\r\n"
+      "i2c init <sdaPin> <sclPin>                       setup I2C master\r\n"
+      "i2c scan                                         scan for devices\r\n"
+      "i2c write <hexDev> <hexAddr> [<hexByte>,...]     write byte(s)\r\n",
+      BUF_LEN_WORKER_RESULT) ;
     G_runtime->worker[idx].result_code = 400 ;
     return ;
   }
   cmd = tokens[1] ;
 
+  if ((strcmp(cmd, "read") == 0) && (num_tokens == 5))          // read
+    f_i2c_read_cmd(idx, tokens[2], tokens[3], atoi(tokens[4])) ;
+  else
   if ((strcmp(cmd, "init") == 0) && (num_tokens == 4))          // init
-    f_i2c_init(idx, atoi(tokens[2]), atoi(tokens[3])) ;
+    f_i2c_init_cmd(idx, atoi(tokens[2]), atoi(tokens[3])) ;
   else
   if ((strcmp(cmd, "scan") == 0) && (num_tokens == 2))          // scan
-    f_i2c_scan(idx) ;
+    f_i2c_scan_cmd(idx) ;
   else
   {
     strncpy(G_runtime->worker[idx].result_msg, "Invalid action\r\n",
