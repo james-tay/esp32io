@@ -1,21 +1,16 @@
 /*
    This is a general purpose function which reads "len" bytes into "buf" from
-   an I2C device address "dev" and register address "addr". Recall that to
-   perform a read, we "write" to the specified address and then read off a
-   certain number of bytes. The total number of bytes read is returned.
+   an I2C device address "dev". Typically the user would have already written
+   to a register, but this is device dependent. The total number of bytes read
+   is returned.
 */
 
-int i2c_io_read(unsigned char dev, unsigned char addr,
-                unsigned char *buf, int len)
+int i2c_io_read(unsigned char dev, unsigned char *buf, int len)
 {
   int total_read=0 ;
   unsigned char *p=buf ;
 
-  Wire.beginTransmission(dev) ;
-  Wire.write(addr) ;
-  Wire.endTransmission() ;
   Wire.requestFrom(dev, len) ;
-
   while ((total_read < len) && (Wire.available() > 0))
   {
     *p = Wire.read() ;
@@ -27,24 +22,23 @@ int i2c_io_read(unsigned char dev, unsigned char addr,
 
 /*
    This function is called from "f_i2c_cmd()" by worker thread "idx". Our job
-   is to read "num_bytes" at "hex_addr" from the I2C device "hex_dev". The
-   bytes read are printed as hex.
+   is to read "num_bytes" from the I2C device "hex_dev". The bytes read are
+   printed as hex.
 */
 
-void f_i2c_read_cmd(int idx, char *hex_dev, char *hex_addr, int num_bytes)
+void f_i2c_read_cmd(int idx, char *hex_dev, int num_bytes)
 {
-  unsigned char buf[DEF_I2C_READ_BYTES] ;
+  unsigned char buf[DEF_I2C_IO_BYTES] ;
 
   if (num_bytes < 0)
     num_bytes = 0 ;
-  if (num_bytes > DEF_I2C_READ_BYTES)
-    num_bytes = DEF_I2C_READ_BYTES ;
+  if (num_bytes > DEF_I2C_IO_BYTES)
+    num_bytes = DEF_I2C_IO_BYTES ;
 
-  // before we call "i2c_io_read()", we need to convert the hex strings
+  // before we call "i2c_io_read()", we need to convert the hex string
 
   unsigned char dev_value = (unsigned char) strtoul(hex_dev, NULL, 16) ;
-  unsigned char addr_value = (unsigned char) strtoul(hex_addr, NULL, 16) ;
-  int amt = i2c_io_read(dev_value, addr_value, buf, num_bytes) ;
+  int amt = i2c_io_read(dev_value, buf, num_bytes) ;
 
   // now dress up "buf" as hex in "result_msg"
 
@@ -134,6 +128,27 @@ void f_i2c_scan_cmd(int idx)
 }
 
 /*
+   This function is called from "f_i2c_cmd()" by worker thread "idx". Our job
+   is to perform an I2C write to the device at "hex_dev". The "hex_data" string
+   contains comma separated hex bytes, and may be NULL if we dont' actually
+   intend to write any data.
+*/
+
+void f_i2c_write_cmd(int idx, char *hex_dev, char *hex_data)
+{
+  int len=0 ;
+  unsigned char buf[DEF_I2C_IO_BYTES] ;
+
+  // parse "hex_data" string, write the raw byte values into "buf" while
+  // making a note in "len".
+
+
+
+
+
+}
+
+/*
    This function is called from "f_action()" by the worker thread at "idx".
    Our job is to parse the user supplied "i2c ..." command to identify what
    to do next.
@@ -144,30 +159,32 @@ void f_i2c_cmd(int idx)
   // parse our "i2c ..." command, or print help
 
   int num_tokens ;
-  char *tokens[5], *cmd=NULL ;
+  char *tokens[4], *cmd=NULL ;
   
   num_tokens = f_parse(G_runtime->worker[idx].cmd, tokens, 5) ;
   if (num_tokens < 2)
   {
     strncpy(G_runtime->worker[idx].result_msg,
-      "i2c read <hexDev> <hexAddr> <numBytes>           read data\r\n"
-      "i2c init <sdaPin> <sclPin>                       setup I2C master\r\n"
-      "i2c scan                                         scan for devices\r\n"
-      "i2c write <hexDev> <hexAddr> [<hexByte>,...]     write byte(s)\r\n",
-      BUF_LEN_WORKER_RESULT) ;
+            "i2c read <hexDev> <numBytes>             read data\r\n"
+            "i2c init <sdaPin> <sclPin>               setup I2C master\r\n"
+            "i2c scan                                 scan for devices\r\n"
+            "i2c write <hexDev> [<hexByte>,...]       write byte(s)\r\n",
+            BUF_LEN_WORKER_RESULT) ;
     G_runtime->worker[idx].result_code = 400 ;
     return ;
   }
   cmd = tokens[1] ;
 
-  if ((strcmp(cmd, "read") == 0) && (num_tokens == 5))          // read
-    f_i2c_read_cmd(idx, tokens[2], tokens[3], atoi(tokens[4])) ;
+  if ((strcmp(cmd, "read") == 0) && (num_tokens == 4))          // read
+    f_i2c_read_cmd(idx, tokens[2], atoi(tokens[3])) ;
   else
   if ((strcmp(cmd, "init") == 0) && (num_tokens == 4))          // init
     f_i2c_init_cmd(idx, atoi(tokens[2]), atoi(tokens[3])) ;
   else
   if ((strcmp(cmd, "scan") == 0) && (num_tokens == 2))          // scan
     f_i2c_scan_cmd(idx) ;
+  if ((strcmp(cmd, "write") == 0) && (num_tokens >= 3))         //write
+    f_i2c_write_cmd(idx, tokens[2], tokens[3]) ;
   else
   {
     strncpy(G_runtime->worker[idx].result_msg, "Invalid action\r\n",
