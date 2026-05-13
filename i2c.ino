@@ -1,4 +1,18 @@
 /*
+   This function is called from "f_i2c_cmd()" by worker thread "idx". We
+   call "Wire.end()" which releases all allocated resources. Can also be
+   used to "reset" the I2C bus.
+*/
+
+void f_i2c_end_cmd(int idx)
+{
+  Wire.end() ;
+  strncat(G_runtime->worker[idx].result_msg, "I2C de-initialized.\r\n",
+          BUF_LEN_WORKER_RESULT) ;
+  G_runtime->worker[idx].result_code = 200 ;
+}
+
+/*
    This is a general purpose function which reads "len" bytes into "buf" from
    an I2C device address "dev". Typically the user would have already written
    to a register, but this is device dependent. The total number of bytes read
@@ -68,8 +82,17 @@ void f_i2c_read_cmd(int idx, char *hex_dev, int num_bytes)
    and "scl" pins.
 */
 
-void f_i2c_init_cmd(int idx, int sda, int scl)
+void f_i2c_init_cmd(int idx, int sda, int scl, char *s_clk_khz)
 {
+  int clock_khz = 100 ;
+
+  if (s_clk_khz != NULL)
+    clock_khz = atoi(s_clk_khz) ;
+  if (clock_khz > DEF_I2C_MAX_CLOCK_KHZ)
+    clock_khz = DEF_I2C_MAX_CLOCK_KHZ ;
+  if (clock_khz < DEF_I2C_MIN_CLOCK_KHZ)
+    clock_khz = DEF_I2C_MIN_CLOCK_KHZ ;
+
   if (Wire.getClock() > 0)
   {
     strncpy(G_runtime->worker[idx].result_msg, "Already initialized.\r\n",
@@ -78,9 +101,9 @@ void f_i2c_init_cmd(int idx, int sda, int scl)
     return ;
   }
 
-  Wire.begin(sda, scl) ;
+  Wire.begin(sda, scl, clock_khz * 1000) ;
   snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
-           "I2C master using sda:%d scl:%d at %dhz.\r\n",
+           "I2C master using sda:%d scl:%d at %d hz.\r\n",
            sda, scl, Wire.getClock()) ;
   G_runtime->worker[idx].result_code = 200 ;
 }
@@ -127,6 +150,16 @@ void f_i2c_scan_cmd(int idx)
     strncat(G_runtime->worker[idx].result_msg, "\r\n", remainder) ;
 }
 
+int f_i2c_io_write(unsigned char dev, unsigned char *buf, int len)
+{
+  int total_written=0 ;
+
+  Wire.beginTransmission(dev) ;
+  total_written = Wire.write(buf, len) ;
+  Wire.endTransmission() ;
+  return(total_written) ;
+}
+
 /*
    This function is called from "f_i2c_cmd()" by worker thread "idx". Our job
    is to perform an I2C write to the device at "hex_dev". The "hex_data" string
@@ -137,15 +170,29 @@ void f_i2c_scan_cmd(int idx)
 void f_i2c_write_cmd(int idx, char *hex_dev, char *hex_data)
 {
   int len=0 ;
+  char *p, *hex_str ;
   unsigned char buf[DEF_I2C_IO_BYTES] ;
 
   // parse "hex_data" string, write the raw byte values into "buf" while
   // making a note in "len".
 
+  hex_str = strtok_r(hex_data, ",", &p) ;
+  while (hex_str)
+  {
+    buf[len] = (unsigned char) strtoul(hex_str, NULL, 16) ;
+    hex_str = strtok_r(NULL, ",", &p) ;
+    len++ ;
+  }
 
+  unsigned char dev_value = (unsigned char) strtoul(hex_dev, NULL, 16) ;
+  int amt = f_i2c_io_write(dev_value, buf, len) ;
 
-
-
+  snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+           "Wrote %d bytes.\r\n", amt) ;
+  if (amt == len)
+    G_runtime->worker[idx].result_code = 200 ;
+  else
+    G_runtime->worker[idx].result_code = 500 ;
 }
 
 /*
@@ -159,30 +206,36 @@ void f_i2c_cmd(int idx)
   // parse our "i2c ..." command, or print help
 
   int num_tokens ;
-  char *tokens[4], *cmd=NULL ;
+  char *tokens[5], *cmd=NULL ;
   
   num_tokens = f_parse(G_runtime->worker[idx].cmd, tokens, 5) ;
   if (num_tokens < 2)
   {
-    strncpy(G_runtime->worker[idx].result_msg,
-            "i2c read <hexDev> <numBytes>             read data\r\n"
-            "i2c init <sdaPin> <sclPin>               setup I2C master\r\n"
-            "i2c scan                                 scan for devices\r\n"
-            "i2c write <hexDev> [<hexByte>,...]       write byte(s)\r\n",
-            BUF_LEN_WORKER_RESULT) ;
+    snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+             "i2c end                                   de-initialize I2C\r\n"
+             "i2c read <hexDev> <numBytes>              read data\r\n"
+             "i2c init <sdaPin> <sclPin> [clk_khz]      setup I2C master\r\n"
+             "i2c scan                                  scan for devices\r\n"
+             "i2c write <hexDev> [<hexByte>,...]        write byte(s)\r\n",
+             DEF_I2C_MIN_CLOCK_KHZ,
+             DEF_I2C_MAX_CLOCK_KHZ) ;
     G_runtime->worker[idx].result_code = 400 ;
     return ;
   }
   cmd = tokens[1] ;
 
+  if ((strcmp(cmd, "end") == 0) && (num_tokens == 2))           // end
+    f_i2c_end_cmd(idx) ;
+  else
   if ((strcmp(cmd, "read") == 0) && (num_tokens == 4))          // read
     f_i2c_read_cmd(idx, tokens[2], atoi(tokens[3])) ;
   else
-  if ((strcmp(cmd, "init") == 0) && (num_tokens == 4))          // init
-    f_i2c_init_cmd(idx, atoi(tokens[2]), atoi(tokens[3])) ;
+  if ((strcmp(cmd, "init") == 0) && (num_tokens >= 4))          // init
+    f_i2c_init_cmd(idx, atoi(tokens[2]), atoi(tokens[3]), tokens[4]) ;
   else
   if ((strcmp(cmd, "scan") == 0) && (num_tokens == 2))          // scan
     f_i2c_scan_cmd(idx) ;
+  else
   if ((strcmp(cmd, "write") == 0) && (num_tokens >= 3))         //write
     f_i2c_write_cmd(idx, tokens[2], tokens[3]) ;
   else

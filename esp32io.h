@@ -42,7 +42,9 @@
 #define DEF_ANON_CALLER -255            // anonymous worker thread "caller"
 #define DEF_UTHREAD_CALLER_OFFSET 1000  // user task thread's "caller" offset
 #define DEF_FS_XFER_TIMEOUT_SECS 10     // "fs send/recv ..." client timeout
-#define DEF_I2C_IO_BYTES 256            // max bytes in a single read/write
+#define DEF_I2C_IO_BYTES 128            // max bytes in a single read/write
+#define DEF_I2C_MAX_CLOCK_KHZ 800       // maximum I2C clock speed in khz
+#define DEF_I2C_MIN_CLOCK_KHZ 10        // minimum I2C clock speed in khz
 
 // stack sizes for various threads
 
