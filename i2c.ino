@@ -155,8 +155,9 @@ int f_i2c_io_write(unsigned char dev, unsigned char *buf, int len)
   int total_written=0 ;
 
   Wire.beginTransmission(dev) ;
-  total_written = Wire.write(buf, len) ;
-  Wire.endTransmission() ;
+  total_written = Wire.write(buf, len) ;        // adds to outgoing buffer
+  if (Wire.endTransmission() != 0)
+    return(0) ;                                 // opsie something went wrong
   return(total_written) ;
 }
 
@@ -212,6 +213,7 @@ void f_i2c_cmd(int idx)
   if (num_tokens < 2)
   {
     snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+             "i2c bmp180                                read from a BMP180\r\n"
              "i2c end                                   de-initialize I2C\r\n"
              "i2c read <hexDev> <numBytes>              read data\r\n"
              "i2c init <sdaPin> <sclPin> [clk_khz]      setup I2C master\r\n"
@@ -224,6 +226,9 @@ void f_i2c_cmd(int idx)
   }
   cmd = tokens[1] ;
 
+  if ((strcmp(cmd, "bmp180") == 0) && (num_tokens == 2))        // bmp180
+    f_bmp180_cmd(idx) ;
+  else
   if ((strcmp(cmd, "end") == 0) && (num_tokens == 2))           // end
     f_i2c_end_cmd(idx) ;
   else
