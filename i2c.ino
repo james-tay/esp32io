@@ -19,7 +19,7 @@ void f_i2c_end_cmd(int idx)
    is returned.
 */
 
-int i2c_io_read(unsigned char dev, unsigned char *buf, int len)
+int f_i2c_io_read(unsigned char dev, unsigned char *buf, int len)
 {
   int total_read=0 ;
   unsigned char *p=buf ;
@@ -49,10 +49,10 @@ void f_i2c_read_cmd(int idx, char *hex_dev, int num_bytes)
   if (num_bytes > DEF_I2C_IO_BYTES)
     num_bytes = DEF_I2C_IO_BYTES ;
 
-  // before we call "i2c_io_read()", we need to convert the hex string
+  // before we call "f_i2c_io_read()", we need to convert the hex string
 
   unsigned char dev_value = (unsigned char) strtoul(hex_dev, NULL, 16) ;
-  int amt = i2c_io_read(dev_value, buf, num_bytes) ;
+  int amt = f_i2c_io_read(dev_value, buf, num_bytes) ;
 
   // now dress up "buf" as hex in "result_msg"
 
@@ -150,6 +150,12 @@ void f_i2c_scan_cmd(int idx)
     strncat(G_runtime->worker[idx].result_msg, "\r\n", remainder) ;
 }
 
+/*
+   A general purpose function which writes "buf" which is "len" bytes long,
+   to "dev". The total number of bytes successfully written is returned, or
+   0 if the I2C device did not ack.
+*/
+
 int f_i2c_io_write(unsigned char dev, unsigned char *buf, int len)
 {
   int total_written=0 ;
@@ -194,6 +200,67 @@ void f_i2c_write_cmd(int idx, char *hex_dev, char *hex_data)
     G_runtime->worker[idx].result_code = 200 ;
   else
     G_runtime->worker[idx].result_code = 500 ;
+}
+
+/*
+   This is a convenience function which reads an 8-bit value at "addr" from
+   "dev". The result is written to "result". On success this function returns
+   1, otherwise 0 if something went wrong.
+*/
+
+int f_i2c_reg_read_char(unsigned char dev, unsigned char addr,
+                        unsigned char *result)
+{
+  if (f_i2c_io_write(dev, &addr, 1) != 1)               // I2C write failed
+  {
+    if (G_runtime->config.debug)
+      Serial.printf("DEBUG: f_i2c_reg_read_char(): cannot write to 0x%x.\r\n",
+                    dev) ;
+    return(0) ;
+  }
+  if (f_i2c_io_read(dev, result, sizeof(char)) == sizeof(char))
+    return(1) ;
+  else
+  {
+    if (G_runtime->config.debug)
+      Serial.printf("DEBUG: f_i2c_reg_read_char(): read from 0x%x failed.\r\n",
+                    dev) ;
+    return(0) ;
+  }
+}
+
+/*
+   This is a convenience function which reads a 16-bit value at "addr" from
+   "dev". The result is written to "result". On success this function returns
+   1, otherwise 0 if something went wrong.
+*/
+
+int f_i2c_reg_read_short(unsigned char dev, unsigned char addr, short *result)
+{
+  unsigned char buf[2] ;
+
+  if (f_i2c_io_write(dev, &addr, 1) != 1)               // I2C write failed
+  {
+    if (G_runtime->config.debug)
+      Serial.printf("DEBUG: f_i2c_reg_read_short(): cannot write to 0x%x.\r\n",
+                    dev) ;
+    return(0) ;
+  }
+  if (f_i2c_io_read(dev, buf, sizeof(short)) == sizeof(short))
+  {
+    int v = (buf[0] << 8) + buf[1] ;
+    if (v > 32767)                              // value is actually negative
+      v = v - 65536 ;
+    *result = (short) v ;
+    return(1) ;
+  }
+  else
+  {
+    if (G_runtime->config.debug)
+      Serial.printf("DEBUG: f_i2c_reg_read_short(): read from 0x%x failed.\r\n",
+                    dev) ;
+    return(0) ;
+  }
 }
 
 /*
