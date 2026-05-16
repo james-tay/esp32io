@@ -148,6 +148,7 @@ void f_i2c_scan_cmd(int idx)
             remainder) ;
   else
     strncat(G_runtime->worker[idx].result_msg, "\r\n", remainder) ;
+  G_runtime->worker[idx].result_code = 200 ;
 }
 
 /*

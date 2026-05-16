@@ -25,15 +25,13 @@ int f_bmp180(float *temperature, float *pressure)
       (f_i2c_reg_read_short(BMP180_ADDR, 0xBA, (short*) &mb) == 0) ||
       (f_i2c_reg_read_short(BMP180_ADDR, 0xBC, (short*) &mc) == 0) ||
       (f_i2c_reg_read_short(BMP180_ADDR, 0xBE, (short*) &md) == 0))
-  {
     return(0) ;
-  }
 
   // read the raw temperature into "raw_t"
 
-  unsigned char buf[2] ;
-  buf[0] = 0xF4 ;
-  buf[1] = 0x2E ;
+  unsigned char buf[3] ;
+  buf[0] = 0xF4 ;                       // write to the control register
+  buf[1] = 0x2E ;                       // request temperature readings
   if (f_i2c_io_write(BMP180_ADDR, buf, 2) != 2)
     return(0) ;
   delay(5) ;
@@ -71,9 +69,45 @@ int f_bmp180(float *temperature, float *pressure)
   long t = (b5 + 8) >> 4 ;
   *temperature = float(t) / 10.0 ;
 
+  // read raw pressure into "pressure_t"
 
+  buf[0] = 0xF4 ;                       // write to control register
+  buf[1] = 0x34 + (BMP180_MODE << 6) ;  // request pressure readings
+  if (f_i2c_io_write(BMP180_ADDR, buf, 2) != 2)
+    return(0) ;
+  delay(26) ;
 
+  buf[0] = 0xF6 ;
+  if ((f_i2c_io_write(BMP180_ADDR, buf, 1) != 1) ||
+      (f_i2c_io_read(BMP180_ADDR, buf, 3) != 3))
+    return(0) ;
+  long msb = buf[0] ;
+  long lsb = buf[1] ;
+  long xlsb = buf[2] ;
+  long raw_p = ((msb << 16) + (lsb << 8) + xlsb) >> (8 - BMP180_MODE) ;
 
+  // now calculate the true pressure
+
+  long b6 = b5 - 4000 ;
+  x1 = (b2 * (b6 * b6) >> 12) >> 11 ;
+  x2 = (ac2 * b6) >> 11 ;
+  long x3 = x1 + x2 ;
+  long b3 = (((ac1 * 4 + x3) << BMP180_MODE) + 2) / 4 ;
+  x1 = ac3 * b6 >> 13 ;
+  x2 = ((b1 * (b6 * b6)) >> 12) >> 16 ;
+  x3 = ((x1 + x2) + 2) >> 2 ;
+  unsigned long b4 = (ac4 * (unsigned long)(x3 + 32768)) >> 15 ;
+  unsigned long b7 = (raw_p - b3) * (50000 >> BMP180_MODE) ;
+  long p ;
+  if (b7 < (unsigned long) 0x80000000)
+    p = (b7 * 2) / b4 ;
+  else
+    p = (b7 / b4) * 2 ;
+  x1 = (p >> 8) * (p >> 8) ;
+  x1 = (x1 * 3038) >> 16 ;
+  x2 = (-7357 * p) >> 16 ;
+  p = p + ((x1 + x2 + 3791) >> 4) ;
+  *pressure = float(p) / 100.0 ;
 
   return(1) ;
 }
