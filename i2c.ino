@@ -281,6 +281,7 @@ void f_i2c_cmd(int idx)
   if (num_tokens < 2)
   {
     snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+             "i2c bme280                                read from a BME280\r\n"
              "i2c bmp180                                read from a BMP180\r\n"
              "i2c end                                   de-initialize I2C\r\n"
              "i2c read <hexDev> <numBytes>              read data\r\n"
@@ -294,6 +295,9 @@ void f_i2c_cmd(int idx)
   }
   cmd = tokens[1] ;
 
+  if ((strcmp(cmd, "bme280") == 0) && (num_tokens == 2))        // bme280
+    f_bme280_cmd(idx) ;
+  else
   if ((strcmp(cmd, "bmp180") == 0) && (num_tokens == 2))        // bmp180
     f_bmp180_cmd(idx) ;
   else
