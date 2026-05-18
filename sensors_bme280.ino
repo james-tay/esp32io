@@ -140,9 +140,24 @@ int f_bme280(float *temperature, float *humidity, float *pressure)
               ((int)calib.dig_T2)) >> 11 ;
   int var2 = (((((adc_T >> 4) - ((int)calib.dig_T1)) * ((adc_T >> 4) -
               ((int)calib.dig_T1))) >> 12) * ((int)calib.dig_T3)) >> 14 ;
-  *temperature = (float) (((var1 + var2) * 5 + 128) >> 8) / 100.0 ;
+  int t_fine = var1 + var2 ;
+  *temperature = (float) ((t_fine * 5 + 128) >> 8) / 100.0 ;
 
+  // now calculate humidity from the raw "adc_H" reading.
 
+  int v_x1_u32r = t_fine - 76800 ;
+  v_x1_u32r = (((((adc_H << 14) - (((int)calib.dig_H4) << 20) -
+               (((int)calib.dig_H5) * v_x1_u32r)) +
+               ((int)16384)) >> 15) * (((((((v_x1_u32r *
+               ((int)calib.dig_H6)) >> 10) *
+                (((v_x1_u32r * ((int)calib.dig_H3)) >> 11) +
+                ((int)32768))) >> 10) + ((int)2097152)) *
+                ((int)calib.dig_H2) + 8192) >> 14)) ;
+  v_x1_u32r = (v_x1_u32r - (((((v_x1_u32r >> 15) * (v_x1_u32r >> 15)) >> 7) *
+               ((int)calib.dig_H1)) >> 4)) ;
+  v_x1_u32r = (v_x1_u32r < 0 ? 0 : v_x1_u32r) ;
+  v_x1_u32r = (v_x1_u32r > 419430400 ? 419430400 : v_x1_u32r) ;
+  *humidity = (float)(v_x1_u32r >> 12) / 1024.0 ;
 
 
   return(1) ;
