@@ -133,8 +133,8 @@ int f_bme280(float *temperature, float *humidity, float *pressure)
   int adc_H = ((unsigned int)buf[6] << 8)  | buf[7];
 
   // using "adc_T", apply calibration params to obtain the real temperature.
-  // the math here is essentially pulled straight from page 25 of the BME280
-  // datasheet.
+  // the really crazy math here is essentially pulled straight from page 25
+  // of the BME280 datasheet.
 
   int var1 = ((((adc_T >> 3) - ((int)calib.dig_T1 << 1))) *
               ((int)calib.dig_T2)) >> 11 ;
@@ -143,13 +143,13 @@ int f_bme280(float *temperature, float *humidity, float *pressure)
   int t_fine = var1 + var2 ;
   *temperature = (float) ((t_fine * 5 + 128) >> 8) / 100.0 ;
 
-  // now calculate humidity from the raw "adc_H" reading.
+  // now calculate humidity from the raw "adc_H" reading
 
   int v_x1_u32r = t_fine - 76800 ;
   v_x1_u32r = (((((adc_H << 14) - (((int)calib.dig_H4) << 20) -
                (((int)calib.dig_H5) * v_x1_u32r)) +
                ((int)16384)) >> 15) * (((((((v_x1_u32r *
-               ((int)calib.dig_H6)) >> 10) *
+                ((int)calib.dig_H6)) >> 10) *
                 (((v_x1_u32r * ((int)calib.dig_H3)) >> 11) +
                 ((int)32768))) >> 10) + ((int)2097152)) *
                 ((int)calib.dig_H2) + 8192) >> 14)) ;
@@ -159,6 +159,24 @@ int f_bme280(float *temperature, float *humidity, float *pressure)
   v_x1_u32r = (v_x1_u32r > 419430400 ? 419430400 : v_x1_u32r) ;
   *humidity = (float)(v_x1_u32r >> 12) / 1024.0 ;
 
+  // now calculate pressure from the raw "adc_P" reading
+
+  long long llvar1 = ((long long )t_fine) - 128000;
+  long long llvar2 = llvar1 * llvar1 * (long long)calib.dig_P6 ;
+  llvar2 = llvar2 + ((llvar1 * (long long)calib.dig_P5) << 17) ;
+  llvar2 = llvar2 + (((long long)calib.dig_P4) << 35) ;
+  llvar1 = ((llvar1 * llvar1 * (long long)calib.dig_P3) >> 8) +
+           ((llvar1 * (long long)calib.dig_P2) << 12) ;
+  llvar1 = (((((long long)1) << 47) + llvar1)) *
+           ((long long)calib.dig_P1) >> 33;
+  if (llvar1 == 0)
+    *pressure = 0 ;
+  long long p = 1048576 - adc_P ;
+  p = (((p << 31) - llvar2) * 3125) / llvar1 ;
+  llvar1 = (((long long)calib.dig_P9) * (p >> 13) * (p >> 13)) >> 25 ;
+  llvar2 = (((long long)calib.dig_P8) * p) >> 19 ;
+  p = ((p + llvar1 + llvar2) >> 8) + (((long long)calib.dig_P7) << 4) ;
+  *pressure = (float) p / 256.0 / 100.0 ;
 
   return(1) ;
 }
