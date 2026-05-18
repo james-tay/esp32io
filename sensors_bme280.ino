@@ -1,6 +1,8 @@
 /*
    The BME280 contains a bunch of registers used for calibrating sensor
-   readings. This structure is used to store them all.
+   readings. This structure is used to store them all. The names and data
+   types of these register values are pulled from page 24 of the BME280
+   datasheet.
 */
 
 struct bme280_calibration
@@ -49,6 +51,7 @@ int f_bme280(float *temperature, float *humidity, float *pressure)
   #define BME280_REG_H2 0xE1            // humidity calibration registers part2
   #define BME280_REG_H_OSAMP 0xF2       // humidity oversampling
   #define BME280_REG_TP_OSAMP 0xF4      // temp & humidity oversampling
+  #define BME280_REG_START 0xF7         // sensor data start address
   #define BME280_H_OSAMP_16 0x05        // x16 humidity oversampling
   #define BME280_TP_OSAMP_16 0xB7       // x16 temp & pressure oversampling
 
@@ -83,7 +86,9 @@ int f_bme280(float *temperature, float *humidity, float *pressure)
   calib.dig_P8 = (buf[15] << 8) | buf[14] ;
   calib.dig_P9 = (buf[17] << 8) | buf[16] ;
 
-  // read humidity calibration parameters, note there are 2 parts
+  // read humidity calibration parameters, note there are 2 parts. Also, note
+  // that the H4 and H5 params cross nibble boundaries, ie, 2x short params
+  // are awkwardly derrived from 3x bytes.
 
   buf[0] = BME280_REG_H1 ;
   if ((f_i2c_io_write(BME280_ADDR, buf, 1) != 1) ||
@@ -97,9 +102,9 @@ int f_bme280(float *temperature, float *humidity, float *pressure)
     return(0) ;                                         // can't talk to BME280
   calib.dig_H2 = (buf[1] << 8) | buf[0] ;
   calib.dig_H3 = buf[2] ;
-  calib.dig_H4 = ((int16_t)buf[3] << 4) | (buf[4] & 0x0F) ;
-  calib.dig_H5 = ((int16_t)buf[5] << 4) | (buf[4] >> 4) ;
-  calib.dig_H6 = (int8_t)buf[6] ;
+  calib.dig_H4 = ((short)buf[3] << 4) | (buf[4] & 0x0F) ;
+  calib.dig_H5 = ((short)buf[5] << 4) | (buf[4] >> 4) ;
+  calib.dig_H6 = buf[6] ;
 
   // configure sensor oversampling
 
@@ -111,6 +116,32 @@ int f_bme280(float *temperature, float *humidity, float *pressure)
   buf[1] = BME280_TP_OSAMP_16 ;
   if (f_i2c_io_write(BME280_ADDR, buf, 2) != 2)
     return(0) ;
+
+  // pause for the sensor to do its thing, and then read out the values,
+  // essentially 8-bytes stores 3 sensor readings.
+
+  delay(120) ;
+  buf[0] = BME280_REG_START ;
+  if ((f_i2c_io_write(BME280_ADDR, buf, 1) != 1) ||
+      (f_i2c_io_read(BME280_ADDR, buf, 8) != 8))
+    return(0) ;
+
+  int adc_P = ((unsigned int)buf[0] << 12) |
+              ((unsigned int)buf[1] << 4) | (buf[2] >> 4) ;
+  int adc_T = ((unsigned int)buf[3] << 12) |
+              ((unsigned int)buf[4] << 4) | (buf[5] >> 4) ;
+  int adc_H = ((unsigned int)buf[6] << 8)  | buf[7];
+
+  // using "adc_T", apply calibration params to obtain the real temperature.
+  // the math here is essentially pulled straight from page 25 of the BME280
+  // datasheet.
+
+  int var1 = ((((adc_T >> 3) - ((int)calib.dig_T1 << 1))) *
+              ((int)calib.dig_T2)) >> 11 ;
+  int var2 = (((((adc_T >> 4) - ((int)calib.dig_T1)) * ((adc_T >> 4) -
+              ((int)calib.dig_T1))) >> 12) * ((int)calib.dig_T3)) >> 14 ;
+  *temperature = (float) (((var1 + var2) * 5 + 128) >> 8) / 100.0 ;
+
 
 
 

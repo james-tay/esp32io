@@ -375,7 +375,7 @@ void f_fs_recv(int idx, char *port_str, char *filename)
     if (G_runtime->config.debug)
       Serial.printf("DEBUG: f_fs_recv() got %d bytes from client.\r\n", amt) ;
 
-    if (f.write((const uint8_t*)buf, amt) != amt)
+    if (f.write((const unsigned char*)buf, amt) != amt)
     {
       snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
                "Failed after writing %d bytes.\r\n", total_bytes) ;
