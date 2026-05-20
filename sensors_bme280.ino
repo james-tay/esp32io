@@ -193,7 +193,7 @@ void f_bme280_cmd(int idx)
   if (f_bme280(&temperature, &humidity, &pressure))
   {
     snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
-             "Temperature:%.1fC Humidity:%.1f%% Pressure:%.1fhPa\r\n",
+             "Temperature:%.2fC Humidity:%.2f%% Pressure:%.2fhPa\r\n",
              temperature, humidity, pressure) ;
     G_runtime->worker[idx].result_code = 200 ;
   }
@@ -203,4 +203,9 @@ void f_bme280_cmd(int idx)
             BUF_LEN_WORKER_RESULT) ;
     G_runtime->worker[idx].result_code = 500 ;
   }
+}
+
+void ft_bme280(S_UserThread *self)
+{
+
 }

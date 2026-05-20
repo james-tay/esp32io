@@ -45,7 +45,7 @@ int f_bmp180(float *temperature, float *pressure)
     v = v - 65536 ;
   short raw_t = (short) v ;
 
-  if (G_runtime->config.debug)
+  if (G_runtime->config.debug > 1)
     Serial.printf("DEBUG: f_bmp180()\r\n"
                   "  ac1: %d\r\n"
                   "  ac2: %d\r\n"
@@ -124,7 +124,7 @@ void f_bmp180_cmd(int idx)
   if (f_bmp180(&temperature, &pressure))
   {
     snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
-             "Temperature:%.1fC Pressure:%.1fhPa\r\n", temperature, pressure) ;
+             "Temperature:%.1fC Pressure:%.2fhPa\r\n", temperature, pressure) ;
     G_runtime->worker[idx].result_code = 200 ;
   }
   else
@@ -134,3 +134,72 @@ void f_bmp180_cmd(int idx)
     G_runtime->worker[idx].result_code = 500 ;
   }
 }
+
+/*
+   This function is called from "f_user_thread_lifecycle()". Our job is to
+   poll a BMP180 periodically and expose it temperature and pressure readings.
+*/
+
+void ft_bmp180(S_UserThread *self)
+{
+  // parse our commandline
+
+  if (self->num_args != 1)
+  {
+    strncpy(self->status, "Incorrect arguments", BUF_LEN_UTHREAD_STATUS) ;
+    self->state = UTHREAD_STOPPED ;
+    return ;
+  }
+  int interval_secs = atoi(self->in_args[0]) ;
+
+  // setup the metrics we'll expose
+
+  if (self->loop == 0)
+  {
+    self->result[0].l_name[0] = "model" ;
+    self->result[0].l_data[0] = "bmp180" ;
+    self->result[0].l_name[1] = "measurement" ;
+    self->result[0].l_data[1] = "temperature" ;
+
+    self->result[1].l_name[0] = "model" ;
+    self->result[1].l_data[0] = "bmp180" ;
+    self->result[1].l_name[1] = "measurement" ;
+    self->result[1].l_data[1] = "pressure" ;
+
+    self->result[2].l_name[0] = "model" ;
+    self->result[2].l_data[0] = "bmp180" ;
+    self->result[2].l_name[1] = "io" ;
+    self->result[2].l_data[1] = "faults" ;
+    self->result[2].result_type = UTHREAD_RESULT_INT ;
+
+    self->result[3].ll_value = esp_timer_get_time() ;   // internal timer
+    self->state = UTHREAD_RUNNING ;
+  }
+
+  float temperature=0.0, pressure=0.0 ;
+  if (f_bmp180(&temperature, &pressure))
+  {
+    self->result[0].f_value = temperature ;
+    self->result[0].result_type = UTHREAD_RESULT_FLOAT ;
+    self->result[1].f_value = pressure ;
+    self->result[1].result_type = UTHREAD_RESULT_FLOAT ;
+  }
+  else
+  {
+    self->result[2].i_value++ ;
+    self->result[0].result_type = UTHREAD_RESULT_NONE ;
+    self->result[1].result_type = UTHREAD_RESULT_NONE ;
+  }
+
+  // calculate when our next run would be, then figure out how long to pause
+
+  self->result[3].ll_value += interval_secs * 1000 * 1000 ;
+  long long nap_usec = self->result[3].ll_value - esp_timer_get_time() ;
+  if (nap_usec > 0)
+  {
+    snprintf(self->status, BUF_LEN_UTHREAD_STATUS, "pausing %lld ms",
+             nap_usec / 1000) ;
+    delay(nap_usec / 1000) ;
+  }
+}
+

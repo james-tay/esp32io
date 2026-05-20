@@ -98,17 +98,20 @@ void f_render_metric(char *label_cfg, char *thread_name, S_ThreadResult *res,
   // now append labels from "res" to "all_labels"
 
   int remainder = BUF_LEN_LINE - strlen(all_labels) - 1 ;
-  for (int idx=0 ; res->l_name[idx] != NULL ; idx++)
+  for (int idx=0 ; idx < DEF_MAX_THREAD_LABELS ; idx++)
   {
-    if (strlen(all_labels) > 0)
+    if ((res->l_name[idx] != NULL) && (res->l_data[idx] != NULL))
     {
-      strncat(all_labels, ",", remainder) ;
-      remainder-- ;
+      if (strlen(all_labels) > 0)
+      {
+        strncat(all_labels, ",", remainder) ;
+        remainder-- ;
+      }
+      snprintf(s, BUF_LEN_LINE, "%s=\"%s\"",
+               res->l_name[idx], res->l_data[idx]) ;
+      strncat(all_labels, s, remainder) ;
+      remainder = remainder - strlen(s) ;
     }
-    snprintf(s, BUF_LEN_LINE, "%s=\"%s\"",
-             res->l_name[idx], res->l_data[idx]) ;
-    strncat(all_labels, s, remainder) ;
-    remainder = remainder - strlen(s) ;
   }
 
   // finally, render the complete metric and labels into user's "buf".

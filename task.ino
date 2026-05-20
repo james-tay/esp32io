@@ -113,6 +113,8 @@ void f_task_help(int idx)
           "\r\n"
           "[User Task Threads - Config Refrence]\r\n"
           "ft_aread:<c>,<pollMs>,<inPin>,<pwrPin>[,<loThres>,<hiThres>]\r\n"
+          "ft_bme280:<c>,<intervalSecs>\r\n"
+          "ft_bmp180:<c>,<intervalSecs>\r\n"
           "ft_dht22:<c>,<dataPin>,<pwrPin>,<intervalSecs>\r\n"
           "ft_dread:<c>,<pollMs>,<inPin>,<pwrPin>,<0|1=pullup>[,<thresMs>]\r\n"
           "ft_ds18b20:<c>,<dataPin>,<pwrPin>,<intervalSecs>\r\n"
@@ -209,6 +211,12 @@ int f_set_ft_addr(int slot, char *ft_name)
 {
   if (strcmp(ft_name, "ft_aread") == 0)
     G_runtime->utask[slot].ft_addr = ft_aread ;
+  else
+  if (strcmp(ft_name, "ft_bme280") == 0)
+    G_runtime->utask[slot].ft_addr = ft_bme280 ;
+  else
+  if (strcmp(ft_name, "ft_bmp180") == 0)
+    G_runtime->utask[slot].ft_addr = ft_bmp180 ;
   else
   if (strcmp(ft_name, "ft_dread") == 0)
     G_runtime->utask[slot].ft_addr = ft_dread ;
