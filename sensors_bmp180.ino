@@ -137,7 +137,7 @@ void f_bmp180_cmd(int idx)
 
 /*
    This function is called from "f_user_thread_lifecycle()". Our job is to
-   poll a BMP180 periodically and expose it temperature and pressure readings.
+   poll a BMP180 periodically and expose its temperature and pressure readings.
 */
 
 void ft_bmp180(S_UserThread *self)
@@ -186,9 +186,9 @@ void ft_bmp180(S_UserThread *self)
   }
   else
   {
-    self->result[2].i_value++ ;
     self->result[0].result_type = UTHREAD_RESULT_NONE ;
     self->result[1].result_type = UTHREAD_RESULT_NONE ;
+    self->result[2].i_value++ ;
   }
 
   // calculate when our next run would be, then figure out how long to pause

@@ -205,7 +205,78 @@ void f_bme280_cmd(int idx)
   }
 }
 
+/*
+   This function is called from "f_user_thread_lifecycle()". Our job is to
+   poll a BME280 periodically and expose its temperature and pressure readings.
+*/
+
 void ft_bme280(S_UserThread *self)
 {
+  // parse our commandline
 
+  if (self->num_args != 1)
+  {
+    strncpy(self->status, "Incorrect arguments", BUF_LEN_UTHREAD_STATUS) ;
+    self->state = UTHREAD_STOPPED ;
+    return ;
+  }
+  int interval_secs = atoi(self->in_args[0]) ;
+
+  // setup the metrics we'll expose
+
+  if (self->loop == 0)
+  {
+    self->result[0].l_name[0] = "model" ;
+    self->result[0].l_data[0] = "bme280" ;
+    self->result[0].l_name[1] = "measurement" ;
+    self->result[0].l_data[1] = "temperature" ;
+
+    self->result[1].l_name[0] = "model" ;
+    self->result[1].l_data[0] = "bme280" ;
+    self->result[1].l_name[1] = "measurement" ;
+    self->result[1].l_data[1] = "humidity" ;
+
+    self->result[2].l_name[0] = "model" ;
+    self->result[2].l_data[0] = "bme280" ;
+    self->result[2].l_name[1] = "measurement" ;
+    self->result[2].l_data[1] = "pressure" ;
+
+    self->result[3].l_name[0] = "model" ;
+    self->result[3].l_data[0] = "bme280" ;
+    self->result[3].l_name[1] = "io" ;
+    self->result[3].l_data[1] = "faults" ;
+    self->result[3].result_type = UTHREAD_RESULT_INT ;
+
+    self->result[4].ll_value = esp_timer_get_time() ;   // internal timer
+    self->state = UTHREAD_RUNNING ;
+  }
+
+  float temperature=0.0, humidity=0.0, pressure=0.0 ;
+  if (f_bme280(&temperature, &humidity, &pressure))
+  {
+    self->result[0].f_value = temperature ;
+    self->result[0].result_type = UTHREAD_RESULT_FLOAT ;
+    self->result[1].f_value = humidity;
+    self->result[1].result_type = UTHREAD_RESULT_FLOAT ;
+    self->result[2].f_value = pressure ;
+    self->result[2].result_type = UTHREAD_RESULT_FLOAT ;
+  }
+  else
+  {
+    self->result[0].result_type = UTHREAD_RESULT_NONE ;
+    self->result[1].result_type = UTHREAD_RESULT_NONE ;
+    self->result[2].result_type = UTHREAD_RESULT_NONE ;
+    self->result[3].i_value++ ;
+  }
+
+  // calculate when our next run would be, then figure out how long to pause
+
+  self->result[4].ll_value += interval_secs * 1000 * 1000 ;
+  long long nap_usec = self->result[4].ll_value - esp_timer_get_time() ;
+  if (nap_usec > 0)
+  {
+    snprintf(self->status, BUF_LEN_UTHREAD_STATUS, "pausing %lld ms",
+             nap_usec / 1000) ;
+    delay(nap_usec / 1000) ;
+  }
 }
