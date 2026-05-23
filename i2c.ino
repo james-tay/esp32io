@@ -6,7 +6,9 @@
 
 void f_i2c_end_cmd(int idx)
 {
+  xSemaphoreTake(G_runtime->L_i2c, portMAX_DELAY) ;
   Wire.end() ;
+  xSemaphoreGive(G_runtime->L_i2c) ;
   strncat(G_runtime->worker[idx].result_msg, "I2C de-initialized.\r\n",
           BUF_LEN_WORKER_RESULT) ;
   G_runtime->worker[idx].result_code = 200 ;
@@ -24,6 +26,7 @@ int f_i2c_io_read(unsigned char dev, unsigned char *buf, int len)
   int total_read=0 ;
   unsigned char *p=buf ;
 
+  xSemaphoreTake(G_runtime->L_i2c, portMAX_DELAY) ;
   Wire.requestFrom(dev, len) ;
   while ((total_read < len) && (Wire.available() > 0))
   {
@@ -31,6 +34,7 @@ int f_i2c_io_read(unsigned char dev, unsigned char *buf, int len)
     total_read++ ;
     p++ ;
   }
+  xSemaphoreGive(G_runtime->L_i2c) ;
   return(total_read) ;
 }
 
@@ -93,11 +97,13 @@ void f_i2c_init_cmd(int idx, int sda, int scl, char *s_clk_khz)
   if (clock_khz < DEF_I2C_MIN_CLOCK_KHZ)
     clock_khz = DEF_I2C_MIN_CLOCK_KHZ ;
 
+  xSemaphoreTake(G_runtime->L_i2c, portMAX_DELAY) ;
   if (Wire.getClock() > 0)
   {
     strncpy(G_runtime->worker[idx].result_msg, "Already initialized.\r\n",
             BUF_LEN_WORKER_RESULT) ;
     G_runtime->worker[idx].result_code = 400 ;
+    xSemaphoreGive(G_runtime->L_i2c) ;
     return ;
   }
 
@@ -105,6 +111,7 @@ void f_i2c_init_cmd(int idx, int sda, int scl, char *s_clk_khz)
   snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
            "I2C master using sda:%d scl:%d at %d hz.\r\n",
            sda, scl, Wire.getClock()) ;
+  xSemaphoreGive(G_runtime->L_i2c) ;
   G_runtime->worker[idx].result_code = 200 ;
 }
 
@@ -123,6 +130,7 @@ void f_i2c_scan_cmd(int idx)
 
   for (addr = 0x08 ; addr < 0x78 ; addr++)
   {
+    xSemaphoreTake(G_runtime->L_i2c, portMAX_DELAY) ;
     Wire.beginTransmission(addr) ;
     if (Wire.endTransmission() == 0)    // this means something ACK'ed
     {
@@ -139,6 +147,7 @@ void f_i2c_scan_cmd(int idx)
         strncat(G_runtime->worker[idx].result_msg, s, remainder) ;
       }
     }
+    xSemaphoreGive(G_runtime->L_i2c) ;
   }
 
   remainder = BUF_LEN_WORKER_RESULT -
@@ -161,10 +170,15 @@ int f_i2c_io_write(unsigned char dev, unsigned char *buf, int len)
 {
   int total_written=0 ;
 
+  xSemaphoreTake(G_runtime->L_i2c, portMAX_DELAY) ;
   Wire.beginTransmission(dev) ;
   total_written = Wire.write(buf, len) ;        // adds to outgoing buffer
   if (Wire.endTransmission() != 0)
+  {
+    xSemaphoreGive(G_runtime->L_i2c) ;
     return(0) ;                                 // opsie something went wrong
+  }
+  xSemaphoreGive(G_runtime->L_i2c) ;
   return(total_written) ;
 }
 
