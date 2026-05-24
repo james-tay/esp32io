@@ -38,12 +38,85 @@
      d:         Function data. Depends on the sensor function
      l:         Labels to be included in exposed metrics
 
-   Currently, lines must begin with with a "c:" or a "f:".
+   Currently, lines must begin with with a "c:" or a "f:". Also, note the
+   following limits,
+
+     DEF_MAX_THREAD_RESULTS     total number of sensor results we can expose
+     BUF_LEN_UTASK_FILESIZE     file size limit of user task file
+*/
+
+struct td_sensors {
+  long long next_run ;                          // usecs timestamp
+} ;
+typedef struct td_sensors S_td_sensors ;
+
+/*
+   This function is called from "f_user_thread_lifecycle()". Its job is to
+   parse its supplied file, acting on each task, line by line.
 */
 
 void ft_sensors(S_UserThread *self)
 {
+  char cmd_buf[BUF_LEN_UTASK_FILESIZE], *cur_cmd, *p ;
+  S_td_sensors *td = NULL ;
+
+  // parse our thread arguments.
+
+  if (self->num_args != 2)
+  {
+    strncpy(self->status, "Incorrect arguments", BUF_LEN_UTHREAD_STATUS) ;
+    self->state = UTHREAD_STOPPED ;
+    return ;
+  }
+  int interval_secs = atoi(self->in_args[0]) ;
+  char *tasks_file = self->in_args[1] ;
+
+  // initialization on our first loop
+
+  if (self->loop == 0)
+  {
+    self->malloc_buf = malloc(sizeof(S_td_sensors)) ;
+    if (self->malloc_buf == NULL)
+    {
+      strncpy(self->status, "malloc failed", BUF_LEN_UTHREAD_STATUS) ;
+      self->state = UTHREAD_STOPPED ;
+      return ;
+    }
+    memset(self->malloc_buf, 0, sizeof(S_td_sensors)) ;
+    td = (S_td_sensors*) self->malloc_buf ;
+    td->next_run = esp_timer_get_time() ;
+  }
+  td = (S_td_sensors*) self->malloc_buf ;
+
+  // read our tasks file into "cmd_buf" and iterate through each task
+
+  if (f_read_whole(tasks_file, cmd_buf, BUF_LEN_UTASK_FILESIZE) < 1)
+  {
+    snprintf(self->status, BUF_LEN_UTHREAD_STATUS,
+             "Cannot read %s", tasks_file) ;
+    self->state = UTHREAD_STOPPED ;
+    return ;
+  }
+
+  cur_cmd = f_get_statement(cmd_buf, &p) ;
+  while (cur_cmd)
+  {
+    if (G_runtime->config.debug)
+      Serial.printf("DEBUG: ft_sensors() cur_cmd:%s\r\n", cur_cmd) ;
 
 
 
+
+
+    cur_cmd = f_get_statement(NULL, &p) ;       // move on to next task
+  }
+
+  // end of sensor poll cycle. Take a nap
+
+  td->next_run = td->next_run + (interval_secs * 1000000) ;
+  long nap_ms = (td->next_run - esp_timer_get_time()) / 1000 ;
+  if (nap_ms < 1)
+    nap_ms = 1 ;
+  snprintf(self->status, BUF_LEN_UTHREAD_STATUS, "nap %ld ms", nap_ms) ;
+  delay(nap_ms) ;
 }
