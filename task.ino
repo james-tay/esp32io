@@ -119,6 +119,7 @@ void f_task_help(int idx)
           "ft_dread:<c>,<pollMs>,<inPin>,<pwrPin>,<0|1=pullup>[,<thresMs>]\r\n"
           "ft_ds18b20:<c>,<dataPin>,<pwrPin>,<intervalSecs>\r\n"
           "ft_relay:<c>,<pin>,<timeOutSecs>\r\n"
+          "ft_sensors:<c>,<intervalSecs>,<filename>\r\n"
           "ft_serial:<c>,<tcpPort>,<baud>,<rxPin>,<txPin>,<pollMs>\r\n"
           "ft_utasks:<c>,<filename>\r\n"
           "ft_wd:<c>,<startupSecs>,<intervalSecs>,<noActivitySecs>\r\n",
@@ -229,6 +230,9 @@ int f_set_ft_addr(int slot, char *ft_name)
   else
   if (strcmp(ft_name, "ft_relay") == 0)
     G_runtime->utask[slot].ft_addr = ft_relay ;
+  else
+  if (strcmp(ft_name, "ft_sensors") == 0)
+    G_runtime->utask[slot].ft_addr = ft_sensors ;
   else
   if (strcmp(ft_name, "ft_serial") == 0)
     G_runtime->utask[slot].ft_addr = ft_serial ;
