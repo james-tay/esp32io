@@ -15,18 +15,19 @@
      - what preparation to perform (eg, power up a group of sensors)
      - the sensor function to call
        - the pin(s) where this sensor(s) is attached to
-       - labels to be associated with this sensor's metrics
+       - labels to be associated with this sensor's metrics (note double-quotes
+         are not needed here)
      - what post-poll actions to perform (eg, power down sensors)
 
    Consider the following polling cycle file,
 
      c:hi 23
-     f:f_sensor_dht22;d:18;l:location="kitchen",model="dht22"
+     f:f_sensor_dht22;d:18;l:location=kitchen,model=dht22
      c:lo 23
      c:hi 22
-     f:f_sensor_ds18b20;d:19;l:location="garage",model="ds18b20"
+     f:f_sensor_ds18b20;d:19;l:location=garage,model=ds18b20
      c:lo 22
-     f:f_hcsr04;d:17,16;l:location="entrance",type="proximity"
+     f:f_hcsr04;d:17,16;l:location=entrance,type=proximity
      f:aread;d:36;l:location="solar",type="acs712-5"
 
    From the above example, we see this file is organized into tasks, one task
@@ -46,9 +47,67 @@
 */
 
 struct td_sensors {
+  int my_idx ;                                  // our user task thread index
   long long next_run ;                          // usecs timestamp
 } ;
 typedef struct td_sensors S_td_sensors ;
+
+/*
+   This function is called from "ft_sensors()". Our job is to process the
+   supplied "cur_cmd". This involves parsing it into semi-colon separated
+   tokens and then deciding what to do with them. Thus, our job is to populate
+   the "c", "f", "d" and "l" pointers.
+*/
+
+void f_sensors_cmd(struct td_sensors *td, char *cur_cmd)
+{
+  char *token, *p ;
+  char *c=NULL, *f=NULL, *d=NULL, *l=NULL ;     // user supplied params
+
+  if (G_runtime->config.debug)
+    Serial.printf("DEBUG: f_sensors_cmd() cur_cmd:%s\r\n", cur_cmd) ;
+
+  token = f_get_statement(cur_cmd, &p) ;
+  while ((token) && (strlen(token) > 2))
+  {
+    if (G_runtime->config.debug)
+      Serial.printf("DEBUG: f_sensors_cmd() token:%s\r\n", token) ;
+    if ((token[0] == 'c') && (token[1] == ':'))
+      c = token + 2 ;
+    if ((token[0] == 'f') && (token[1] == ':'))
+      f = token + 2 ;
+    if ((token[0] == 'd') && (token[1] == ':'))
+      d = token + 2 ;
+    if ((token[0] == 'l') && (token[1] == ':'))
+      l = token + 2 ;
+    token = f_get_statement(NULL, &p) ;         // move on to next token
+  }
+
+  // broadly, statements are either a "c" (command) or a "f" (function)
+
+  if (c)
+  {
+    int tid = f_get_next_worker() ;
+    G_runtime->worker[tid].caller = DEF_UTHREAD_CALLER_OFFSET + td->my_idx ;
+    G_runtime->worker[tid].cmd = c ;
+    xTaskNotifyGive(G_runtime->worker[tid].w_handle) ;      // wake worker
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY) ;               // wait here
+
+    // if we're here, that means worker "tid" has completed "cur_cmd"
+
+    if (G_runtime->config.debug)
+      Serial.printf("DEBUG: f_sensors_cmd() c:%s -> %d:%s", c,
+                    G_runtime->worker[tid].result_code,
+                    G_runtime->worker[tid].result_msg) ;
+
+    G_runtime->worker[tid].cmd = NULL ;         // unset worker's "cmd"
+    G_runtime->worker[tid].state = W_IDLE ;     // release worker
+  }
+
+
+
+
+}
 
 /*
    This function is called from "f_user_thread_lifecycle()". Its job is to
@@ -57,6 +116,7 @@ typedef struct td_sensors S_td_sensors ;
 
 void ft_sensors(S_UserThread *self)
 {
+  int idx ;
   char cmd_buf[BUF_LEN_UTASK_FILESIZE], *cur_cmd, *p ;
   S_td_sensors *td = NULL ;
 
@@ -84,7 +144,23 @@ void ft_sensors(S_UserThread *self)
     }
     memset(self->malloc_buf, 0, sizeof(S_td_sensors)) ;
     td = (S_td_sensors*) self->malloc_buf ;
+    td->my_idx = -1 ;
     td->next_run = esp_timer_get_time() ;
+
+    // identify our user task thread index (needed for job dispatch later)
+
+    for (idx=0 ; idx < DEF_MAX_USER_THREADS ; idx++)
+      if (&G_runtime->utask[idx] == self)
+      {
+        td->my_idx = idx ;
+        break ;
+      }
+    if (idx == DEF_MAX_USER_THREADS)
+    {
+      strncpy(self->status, "Cannot find my_idx", BUF_LEN_UTHREAD_STATUS) ;
+      self->state = UTHREAD_STOPPED ;
+      return ;
+    }
   }
   td = (S_td_sensors*) self->malloc_buf ;
 
@@ -101,13 +177,7 @@ void ft_sensors(S_UserThread *self)
   cur_cmd = f_get_statement(cmd_buf, &p) ;
   while (cur_cmd)
   {
-    if (G_runtime->config.debug)
-      Serial.printf("DEBUG: ft_sensors() cur_cmd:%s\r\n", cur_cmd) ;
-
-
-
-
-
+    f_sensors_cmd(td, cur_cmd) ;
     cur_cmd = f_get_statement(NULL, &p) ;       // move on to next task
   }
 
