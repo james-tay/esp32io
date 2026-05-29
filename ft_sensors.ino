@@ -22,9 +22,11 @@
    Consider the following polling cycle file,
 
      c:hi 23
+     c:delay_ms 300
      f:f_sensor_dht22;d:18;l:location=kitchen,model=dht22
      c:lo 23
      c:hi 22
+     c:delay_ms 300
      f:f_sensor_ds18b20;d:19;l:location=garage,model=ds18b20
      c:lo 22
      f:f_hcsr04;d:17,16;l:location=entrance,type=proximity
@@ -83,25 +85,35 @@ void f_sensors_cmd(struct td_sensors *td, char *cur_cmd)
     token = f_get_statement(NULL, &p) ;         // move on to next token
   }
 
-  // broadly, statements are either a "c" (command) or a "f" (function)
+  // broadly, statements are either a "c" (command) or a "f" (function). If
+  // "cur_cmd" is a "c", evaluate built-in commands, otherwise farm it out to
+  // a worker thread.
 
   if (c)
   {
-    int tid = f_get_next_worker() ;
-    G_runtime->worker[tid].caller = DEF_UTHREAD_CALLER_OFFSET + td->my_idx ;
-    G_runtime->worker[tid].cmd = c ;
-    xTaskNotifyGive(G_runtime->worker[tid].w_handle) ;      // wake worker
-    ulTaskNotifyTake(pdTRUE, portMAX_DELAY) ;               // wait here
+    char *tokens[2] ;
+    if ((strncmp(c, "delay_ms", 8) == 0) && (f_parse(c, tokens, 2) == 2))
+    {
+      delay(atoi(tokens[1])) ;
+    }
+    else
+    {
+      int tid = f_get_next_worker() ;
+      G_runtime->worker[tid].caller = DEF_UTHREAD_CALLER_OFFSET + td->my_idx ;
+      G_runtime->worker[tid].cmd = c ;
+      xTaskNotifyGive(G_runtime->worker[tid].w_handle) ;      // wake worker
+      ulTaskNotifyTake(pdTRUE, portMAX_DELAY) ;               // wait here
 
-    // if we're here, that means worker "tid" has completed "cur_cmd"
+      // if we're here, that means worker "tid" has completed "cur_cmd"
 
-    if (G_runtime->config.debug)
-      Serial.printf("DEBUG: f_sensors_cmd() c:%s -> %d:%s", c,
-                    G_runtime->worker[tid].result_code,
-                    G_runtime->worker[tid].result_msg) ;
+      if (G_runtime->config.debug)
+        Serial.printf("DEBUG: f_sensors_cmd() c:%s -> %d:%s", c,
+                      G_runtime->worker[tid].result_code,
+                      G_runtime->worker[tid].result_msg) ;
 
-    G_runtime->worker[tid].cmd = NULL ;         // unset worker's "cmd"
-    G_runtime->worker[tid].state = W_IDLE ;     // release worker
+      G_runtime->worker[tid].cmd = NULL ;         // unset worker's "cmd"
+      G_runtime->worker[tid].state = W_IDLE ;     // release worker
+    }
   }
 
 
@@ -177,6 +189,18 @@ void ft_sensors(S_UserThread *self)
   cur_cmd = f_get_statement(cmd_buf, &p) ;
   while (cur_cmd)
   {
+    // do a "trim()" on "cur_cmd", ie, remove white space, before sending it
+    // to "f_sensors_cmd()".
+
+    while ((strlen(cur_cmd) > 0) && (isspace((char)*cur_cmd)))
+      cur_cmd++ ;
+    char *end = cur_cmd + strlen(cur_cmd) - 1 ;
+    while ((end > cur_cmd) && (isspace((char)*end)))
+    {
+      *end = 0 ;
+      end-- ;
+    }
+
     f_sensors_cmd(td, cur_cmd) ;
     cur_cmd = f_get_statement(NULL, &p) ;       // move on to next task
   }
