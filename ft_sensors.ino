@@ -49,6 +49,7 @@
    following limits,
 
      DEF_MAX_THREAD_RESULTS     total number of sensor results we can expose
+     DEF_MAX_THREAD_RESULTS     total number of sensor functions we can call
      BUF_LEN_UTASK_FILESIZE     file size limit of user task file
 
   METRIC LABELS
@@ -73,14 +74,17 @@
    "cur_result". Thus if "cur_result" exceeds "total_results", that indicates
    a "result[]" set's "l_name" and "l_data" need to be initialized.
 
+   Recall that the metric name is still determined by thread name, or it may
+   be defined by "/<thread_name>.labels" (optional file).
+
   SENSOR FAILURES
 
    Some sensor functions may return multiple results (eg, multiple DS18B20
    units on a single bus). If a particular sensor drops off the bus, this can
    lead to a misalignment of "result[]" values. To mitigate this situation,
-   we track "total_results" at the end of each sensor poll cycle. If there
-   is a mismatch, we must reinitialize the "results[]" array (and all its
-   "l_name" and "l_data" pointers).
+   we track "total_results" at the end of each sensor poll cycle against the
+   "prev_results" value. If there is a mismatch, we must reinitialize the
+   "results[]" array (and all its "l_name" and "l_data" pointers).
 */
 
 struct td_sensors {
@@ -89,9 +93,10 @@ struct td_sensors {
   char *cur_l ;                                 // current metric labels
   int cur_function ;                            // current "f:..." statement
   int num_functions ;                           // total "f:.." statements
-  int cur_result ;                              // current sensor result
-  int total_results ;                           // total sensor results
-  int my_idx ;                                  // our user task thread index
+  int cur_result ;                              // current sensor result index
+  int total_results ;                           // current total sensor results
+  int prev_results ;                            // results from previous run
+  int t_idx ;                                   // our user task thread index
   long long next_run ;                          // usecs timestamp
   char *label_base[DEF_MAX_THREAD_RESULTS] ;    // pointers into "label_buf"
   char label_buf[BUF_LEN_UTASK_FILESIZE] ;      // all labels here
@@ -104,6 +109,8 @@ typedef struct td_sensors S_td_sensors ;
    functions are supported.
 
      - aread()
+     - f_sensor_dht22()
+     - f_sensor_ds18b20()
 */
 
 void f_sensor_function(struct td_sensors *td)
@@ -113,13 +120,37 @@ void f_sensor_function(struct td_sensors *td)
     int in_pin = atoi(td->cur_d) ;
     int value = analogRead(in_pin) ;
     if (G_runtime->config.debug)
-      Serial.printf("DEBUG: f_sensor_function() aread(pin:%d):%d\r\n",
-                    in_pin, value) ;
+      Serial.printf("DEBUG: f_sensor_function() aread(pin:%d):%d l:%s\r\n",
+                    in_pin, value, td->label_base[td->cur_function]) ;
 
+    // if this is the first time writing into "result[]", then we'll need to
+    // parse our "label_base[]" and setup "l_name" and "l_data" fields.
 
+    S_ThreadResult *res = G_runtime->utask[td->t_idx].result ;
+    if (td->cur_result == td->total_results)
+    {
+      int label_idx=0 ;
+      char *p, *token ;
+      token = strtok_r(td->label_base[td->cur_function], ",", &p) ;
+      while (token)
+      {
+        // "token" is typically in the format "label=value"
 
+        char *pos = strchr(token, '=') ;
+        if (pos)
+        {
+          *pos = 0 ;
+          res[td->cur_result].l_name[label_idx] = token ;
+          res[td->cur_result].l_data[label_idx] = pos + 1 ;
+        }
+        token = strtok_r(NULL, ",", &p) ;
+        label_idx++ ;
+      }
+    }
+    res[td->cur_result].i_value = value ;
+    res[td->cur_result].result_type = UTHREAD_RESULT_INT ;
 
-
+    td->cur_result++ ; // move this on to the next insertion point
   }
 
 
@@ -170,7 +201,7 @@ void f_sensors_cmd(struct td_sensors *td, char *cur_cmd)
     else
     {
       int tid = f_get_next_worker() ;
-      G_runtime->worker[tid].caller = DEF_UTHREAD_CALLER_OFFSET + td->my_idx ;
+      G_runtime->worker[tid].caller = DEF_UTHREAD_CALLER_OFFSET + td->t_idx ;
       G_runtime->worker[tid].cmd = c ;
       xTaskNotifyGive(G_runtime->worker[tid].w_handle) ;      // wake worker
       ulTaskNotifyTake(pdTRUE, portMAX_DELAY) ;               // wait here
@@ -202,13 +233,11 @@ void f_sensors_cmd(struct td_sensors *td, char *cur_cmd)
     if (td->cur_function > td->num_functions)
     {
       td->num_functions++ ;
-      int idx = td->cur_function ;
-      memcpy(td->label_base[idx], l, strlen(l)) ;
-      td->label_base[idx + 1] = td->label_base[idx] + strlen(l) + 1 ;
+      int fn_idx = td->cur_function ;
+      memcpy(td->label_base[fn_idx], l, strlen(l)) ;
+      td->label_base[fn_idx + 1] = td->label_base[fn_idx] + strlen(l) + 1 ;
     }
-
-    // now execute the sensor's function
-    f_sensor_function(td) ;
+    f_sensor_function(td) ;             // now execute sensor function
   }
 }
 
@@ -219,7 +248,7 @@ void f_sensors_cmd(struct td_sensors *td, char *cur_cmd)
 
 void ft_sensors(S_UserThread *self)
 {
-  int idx ;
+  int t_idx ;
   char cmd_buf[BUF_LEN_UTASK_FILESIZE], *cur_cmd, *p ;
   S_td_sensors *td = NULL ;
 
@@ -247,25 +276,26 @@ void ft_sensors(S_UserThread *self)
     }
     memset(self->malloc_buf, 0, sizeof(S_td_sensors)) ;
     td = (S_td_sensors*) self->malloc_buf ;
-    td->my_idx = -1 ;
+    td->t_idx = -1 ;
     td->num_functions = -1 ;
     td->label_base[0] = td->label_buf ;
     td->next_run = esp_timer_get_time() ;
 
     // identify our user task thread index (needed for job dispatch later)
 
-    for (idx=0 ; idx < DEF_MAX_USER_THREADS ; idx++)
-      if (&G_runtime->utask[idx] == self)
+    for (t_idx=0 ; t_idx < DEF_MAX_USER_THREADS ; t_idx++)
+      if (&G_runtime->utask[t_idx] == self)
       {
-        td->my_idx = idx ;
+        td->t_idx = t_idx ;
         break ;
       }
-    if (idx == DEF_MAX_USER_THREADS)
+    if (t_idx == DEF_MAX_USER_THREADS)
     {
-      strncpy(self->status, "Cannot find my_idx", BUF_LEN_UTHREAD_STATUS) ;
+      strncpy(self->status, "Cannot find t_idx", BUF_LEN_UTHREAD_STATUS) ;
       self->state = UTHREAD_STOPPED ;
       return ;
     }
+    self->state = UTHREAD_RUNNING ;
   }
   td = (S_td_sensors*) self->malloc_buf ;
 
@@ -298,17 +328,13 @@ void ft_sensors(S_UserThread *self)
       *end = 0 ;
       end-- ;
     }
-
-    f_sensors_cmd(td, cur_cmd) ;
-
-    // check if "td->cur_function" exceeds its limit
-    if (td->cur_function == DEF_MAX_THREAD_RESULTS)
+    f_sensors_cmd(td, cur_cmd) ;                        // run user statement
+    if (td->cur_function == DEF_MAX_THREAD_RESULTS)     // too many functions
     {
       strncpy(self->status, "Too many functions", BUF_LEN_UTHREAD_STATUS) ;
       self->state = UTHREAD_STOPPED ;
       return ;
     }
-
     cur_cmd = f_get_statement(NULL, &p) ;       // move on to next task
   }
 
