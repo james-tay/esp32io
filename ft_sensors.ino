@@ -1,4 +1,6 @@
 /*
+  BACKGROUND
+
    One of the side effects of having a large number of sensors (eg, DHT22,
    DS18B20, HC-SR04, ACS712, etc) connected to an ESP32, is that running
    individual threads to poll and expose their metrics results in a high
@@ -34,25 +36,94 @@
 
    From the above example, we see this file is organized into tasks, one task
    per line. Within each task, various parameters are seperated by semi-colons.
-   The following parameters are supported:
+   Each line must start with either a "c:" or a "f:". A "f:" statement is
+   usually accompanied by other parameters. The following parameters are
+   supported:
 
      c:         A command, any supported command may be executed
      f:         Function name. Only certain sensor functions are supported
-     d:         Function data. Depends on the sensor function
-     l:         Labels to be included in exposed metrics
+      d:        Function data. Depends on the sensor function
+      l:        Labels to be included in exposed metrics
 
    Currently, lines must begin with with a "c:" or a "f:". Also, note the
    following limits,
 
      DEF_MAX_THREAD_RESULTS     total number of sensor results we can expose
      BUF_LEN_UTASK_FILESIZE     file size limit of user task file
+
+  METRIC LABELS
+
+   On each call to "ft_sensors()", the user specified task file is read into
+   the function's "cmd_buf". This means user specified metric labels for each
+   sensor lives in "cmd_buf". We need to setup the user task thread's "results"
+   struct array's "l_name" and "l_data" pointers, but these must not point
+   into "cmd_buf" since this buffer goes out of scope once "ft_sensors()"
+   returns. Thus we copy all sensor labels into a single "label_buf" in the
+   S_td_sensors structure, and use the "label_base[]" array to point to each
+   sensor's labels.
+
+   As we progress through each "f:" statement, the "f_sensors_cmd()" function
+   increments "cur_function" and is responsible for setting up "label_base[]"
+   and "label_buf" on first use. We know this is the first use because
+   "num_functions" is initialized to -1. The user supplied metric labels are
+   copied into "label_buf" at the current "label_base[]", so that we can use
+   "strtok_r()" to split the individual labels. For this reason, the next
+   element in "label_base[]" is always set to point to the start of the next
+   offset in "label_buf". As sensor results are obtained, they are tracked in
+   "cur_result". Thus if "cur_result" exceeds "total_results", that indicates
+   a "result[]" set's "l_name" and "l_data" need to be initialized.
+
+  SENSOR FAILURES
+
+   Some sensor functions may return multiple results (eg, multiple DS18B20
+   units on a single bus). If a particular sensor drops off the bus, this can
+   lead to a misalignment of "result[]" values. To mitigate this situation,
+   we track "total_results" at the end of each sensor poll cycle. If there
+   is a mismatch, we must reinitialize the "results[]" array (and all its
+   "l_name" and "l_data" pointers).
 */
 
 struct td_sensors {
+  char *cur_f ;                                 // user supplied function name
+  char *cur_d ;                                 // current data params
+  char *cur_l ;                                 // current metric labels
+  int cur_function ;                            // current "f:..." statement
+  int num_functions ;                           // total "f:.." statements
+  int cur_result ;                              // current sensor result
+  int total_results ;                           // total sensor results
   int my_idx ;                                  // our user task thread index
   long long next_run ;                          // usecs timestamp
+  char *label_base[DEF_MAX_THREAD_RESULTS] ;    // pointers into "label_buf"
+  char label_buf[BUF_LEN_UTASK_FILESIZE] ;      // all labels here
 } ;
 typedef struct td_sensors S_td_sensors ;
+
+/*
+   This function is called from "f_sensors_cmd()". Our job is to call the
+   specified "cur_f" function with data params "cur_d". The following sensor
+   functions are supported.
+
+     - aread()
+*/
+
+void f_sensor_function(struct td_sensors *td)
+{
+  if (strcmp(td->cur_f, "aread") == 0)
+  {
+    int in_pin = atoi(td->cur_d) ;
+    int value = analogRead(in_pin) ;
+    if (G_runtime->config.debug)
+      Serial.printf("DEBUG: f_sensor_function() aread(pin:%d):%d\r\n",
+                    in_pin, value) ;
+
+
+
+
+
+  }
+
+
+}
 
 /*
    This function is called from "ft_sensors()". Our job is to process the
@@ -116,9 +187,29 @@ void f_sensors_cmd(struct td_sensors *td, char *cur_cmd)
     }
   }
 
+  if ((f) && (d) && (l))
+  {
+    td->cur_f = f ;             // function name
+    td->cur_d = d ;             // data params
+    td->cur_l = l ;             // metric labels
+    td->cur_function++ ;
 
+    // if this is the first time we're encounting this function, then copy
+    // its metric labels into "label_base[]" (which references "label_buf"),
+    // and update the next "label_base[]" so that it is ready for the next
+    // "l:..." entry.
 
+    if (td->cur_function > td->num_functions)
+    {
+      td->num_functions++ ;
+      int idx = td->cur_function ;
+      memcpy(td->label_base[idx], l, strlen(l)) ;
+      td->label_base[idx + 1] = td->label_base[idx] + strlen(l) + 1 ;
+    }
 
+    // now execute the sensor's function
+    f_sensor_function(td) ;
+  }
 }
 
 /*
@@ -157,6 +248,8 @@ void ft_sensors(S_UserThread *self)
     memset(self->malloc_buf, 0, sizeof(S_td_sensors)) ;
     td = (S_td_sensors*) self->malloc_buf ;
     td->my_idx = -1 ;
+    td->num_functions = -1 ;
+    td->label_base[0] = td->label_buf ;
     td->next_run = esp_timer_get_time() ;
 
     // identify our user task thread index (needed for job dispatch later)
@@ -186,6 +279,11 @@ void ft_sensors(S_UserThread *self)
     return ;
   }
 
+  // this is where we'll iterate through all statements, but first initialize
+  // variables which track progress.
+
+  td->cur_function = -1 ;
+  td->cur_result = 0 ;
   cur_cmd = f_get_statement(cmd_buf, &p) ;
   while (cur_cmd)
   {
@@ -202,6 +300,15 @@ void ft_sensors(S_UserThread *self)
     }
 
     f_sensors_cmd(td, cur_cmd) ;
+
+    // check if "td->cur_function" exceeds its limit
+    if (td->cur_function == DEF_MAX_THREAD_RESULTS)
+    {
+      strncpy(self->status, "Too many functions", BUF_LEN_UTHREAD_STATUS) ;
+      self->state = UTHREAD_STOPPED ;
+      return ;
+    }
+
     cur_cmd = f_get_statement(NULL, &p) ;       // move on to next task
   }
 
