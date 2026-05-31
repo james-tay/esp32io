@@ -74,6 +74,13 @@
    "cur_result". Thus if "cur_result" exceeds "total_results", that indicates
    a "result[]" set's "l_name" and "l_data" need to be initialized.
 
+   Certain sensor functions (eg, "f_sensor_ds18b20()"), when run for the first
+   time, may detect multiple devices on a bus. Thus, we need a buffer to store
+   detected device addresses (these in turn are used as labels when exposing
+   metrics). Thus, "label_buf" is again used for this purpose. In this case,
+   the current "label_base[]" pointer is pushed forward to allow for this
+   storage.
+
    Recall that the metric name is still determined by thread name, or it may
    be defined by "/<thread_name>.labels" (optional file).
 
@@ -115,18 +122,15 @@ typedef struct td_sensors S_td_sensors ;
 
 void f_sensor_function(struct td_sensors *td)
 {
-  if (strcmp(td->cur_f, "aread") == 0)
+  S_ThreadResult *res = G_runtime->utask[td->t_idx].result ;
+
+  if (strcmp(td->cur_f, "aread") == 0)                  // aread()
   {
     int in_pin = atoi(td->cur_d) ;
-    int value = analogRead(in_pin) ;
-    if (G_runtime->config.debug)
-      Serial.printf("DEBUG: f_sensor_function() aread(pin:%d):%d l:%s\r\n",
-                    in_pin, value, td->label_base[td->cur_function]) ;
 
     // if this is the first time writing into "result[]", then we'll need to
     // parse our "label_base[]" and setup "l_name" and "l_data" fields.
 
-    S_ThreadResult *res = G_runtime->utask[td->t_idx].result ;
     if (td->cur_result == td->total_results)
     {
       int label_idx=0 ;
@@ -146,13 +150,33 @@ void f_sensor_function(struct td_sensors *td)
         token = strtok_r(NULL, ",", &p) ;
         label_idx++ ;
       }
+      td->total_results++ ;     // indicate this result is now initialized
     }
-    res[td->cur_result].i_value = value ;
+
+    res[td->cur_result].i_value = analogRead(in_pin) ;
     res[td->cur_result].result_type = UTHREAD_RESULT_INT ;
 
-    td->cur_result++ ; // move this on to the next insertion point
+    td->cur_result++ ;          // move this on to the next insertion point
   }
 
+  if (strcmp(td->cur_f, "f_sensor_ds18b20") == 0)       // f_sensor_ds18b20()
+  {
+    int data_pin = atoi(td->cur_d) ;
+    float temperatures[DEF_DS18B20_MAX_PER_BUS] ;
+    unsigned char addrs[DEF_DS18B20_MAX_PER_BUS] ;
+
+    memset(addrs, 0, DEF_DS18B20_MAX_PER_BUS * 17) ;
+    int total = f_sensor_ds18b20(data_pin, temperatures, addrs) ;
+
+    // if this our first time writing into "result[]", we'll need to store
+    // the hex string addresses of DS18B20 units in heap memory. Since the
+    // current "label_base[]" entry points at "free" space, we'll use this
+    // area for storing the hex strings and move the current "label_base[]"
+    // forward.
+
+
+
+  }
 
 }
 
@@ -250,7 +274,7 @@ void ft_sensors(S_UserThread *self)
 {
   int t_idx ;
   char cmd_buf[BUF_LEN_UTASK_FILESIZE], *cur_cmd, *p ;
-  S_td_sensors *td = NULL ;
+  S_td_sensors *td=NULL ;
 
   // parse our thread arguments.
 
@@ -295,7 +319,7 @@ void ft_sensors(S_UserThread *self)
       self->state = UTHREAD_STOPPED ;
       return ;
     }
-    self->state = UTHREAD_RUNNING ;
+    self->state = UTHREAD_RUNNING ;     // results are exposed once this is set
   }
   td = (S_td_sensors*) self->malloc_buf ;
 
@@ -338,12 +362,14 @@ void ft_sensors(S_UserThread *self)
     cur_cmd = f_get_statement(NULL, &p) ;       // move on to next task
   }
 
-  // end of sensor poll cycle. Take a nap
+  // end of sensor poll cycle. Update our status and take a nap
 
   td->next_run = td->next_run + (interval_secs * 1000000) ;
   long nap_ms = (td->next_run - esp_timer_get_time()) / 1000 ;
   if (nap_ms < 1)
     nap_ms = 1 ;
-  snprintf(self->status, BUF_LEN_UTHREAD_STATUS, "nap %ld ms", nap_ms) ;
+  snprintf(self->status, BUF_LEN_UTHREAD_STATUS,
+           "funtions:%d results:%d nap:%ldms",
+           td->num_functions, td->total_results, nap_ms) ;
   delay(nap_ms) ;
 }

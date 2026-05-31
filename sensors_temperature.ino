@@ -5,7 +5,6 @@
 #define DHT22_POWER_ON_DELAY_MS 1200    // based on datasheet section 6
 #define DHT22_POLL_DELAY_MS 2200        // based on datasheet section 7
 
-#define DS18B20_MAX_PER_BUS 8           // max devices per GPIO pin
 #define DS18B20_POLL_DELAY 800          // based on datasheet page 1
 #define DS18B20_POWER_ON_DELAY_MS 20    // wait for voltage to stabilize
 #define DS18B20_TEMP_MAX 125.0          // maximum valid temperature reading
@@ -251,10 +250,10 @@ void ft_dht22(S_UserThread *self)
 }
 
 /*
-   This function searches "pin" for DS18B20 devices, up to DS18B20_MAX_PER_BUS
-   will be searched. Their readings will be written into the "t_values" array
-   and their OneWire addresses written into the "addresses" array. The actual
-   number of devices discovered is returned.
+   This function searches "pin" for up to DEF_DS18B20_MAX_PER_BUS devices.
+   Their readings will be written into the "t_values" array and their OneWire
+   addresses written into the "addresses" array. The actual number of devices
+   discovered is returned.
 */
 
 int f_sensor_ds18b20(int pin, float *t_values, unsigned char *addrs)
@@ -266,7 +265,7 @@ int f_sensor_ds18b20(int pin, float *t_values, unsigned char *addrs)
   bus.reset() ;
   bus.reset_search() ;
 
-  while ((bus.search(dev)) && (count < DS18B20_MAX_PER_BUS))
+  while ((bus.search(dev)) && (count < DEF_DS18B20_MAX_PER_BUS))
     if (dev[0] == 0x28) // DS18B20 units have 0x28 as their first addr byte
     {
       memcpy(addr_ptr, dev, 8) ;
@@ -320,8 +319,8 @@ int f_sensor_ds18b20(int pin, float *t_values, unsigned char *addrs)
 void f_ds18b20_cmd(int idx)
 {
   char *tokens[2], buf[BUF_LEN_LINE], dev[8] ;
-  unsigned char addrs[DS18B20_MAX_PER_BUS * 8] ; // 8x hex bytes per device
-  float temperatures[DS18B20_MAX_PER_BUS] ;
+  unsigned char addrs[DEF_DS18B20_MAX_PER_BUS * 8] ; // 8x hex bytes per device
+  float temperatures[DEF_DS18B20_MAX_PER_BUS] ;
 
   if (f_parse(G_runtime->worker[idx].cmd, tokens, 2) != 2)
   {
@@ -330,7 +329,7 @@ void f_ds18b20_cmd(int idx)
     G_runtime->worker[idx].result_code = 400 ;
     return ;
   }
-  memset(addrs, 0, DS18B20_MAX_PER_BUS * 17) ;
+  memset(addrs, 0, DEF_DS18B20_MAX_PER_BUS * 17) ;
   int total = f_sensor_ds18b20(atoi(tokens[1]), temperatures, addrs) ;
   for (int i=0 ; i < total ; i++)
   {
@@ -362,7 +361,7 @@ struct td_ds18b20 {
   int intervalSecs ;                            // how often we poll
   int total_sensors ;                           // total sensors found on bus
   long long ts_next_run ;                       // time of next intended run
-  char addr_buf[DS18B20_MAX_PER_BUS * (16 + 1)] ; // buffer for dev addresses
+  char addr_buf[DEF_DS18B20_MAX_PER_BUS * (16 + 1)] ; // buffer for dev addrs
 } ;
 typedef struct td_ds18b20 S_td_ds18b20 ;
 
@@ -408,8 +407,9 @@ void ft_ds18b20(S_UserThread *self)
 
   int total, retries ;
   long long ts_start = esp_timer_get_time() ;
-  float temperatures[DS18B20_MAX_PER_BUS], previous[DS18B20_MAX_PER_BUS] ;
-  unsigned char addrs[DS18B20_MAX_PER_BUS * 8] ; // 8x hex bytes per device
+  float temperatures[DEF_DS18B20_MAX_PER_BUS] ;
+  float previous[DEF_DS18B20_MAX_PER_BUS] ;
+  unsigned char addrs[DEF_DS18B20_MAX_PER_BUS * 8] ; // 8x hex bytes per device
 
   // "addrs" is a temporary buffer we pass to "f_sensor_ds18b20()", while
   // "td->addr_buf" holds the (hex) string representation for addresses of all
@@ -417,7 +417,7 @@ void ft_ds18b20(S_UserThread *self)
   // results we'll expose. Thus, the "addr_buf[]" has the format,
   //   [<1st_dev_16chars>0x00][<2nd_dev_16chars>0x00]...
 
-  int addr_size = (16 + 1) * DS18B20_MAX_PER_BUS ;
+  int addr_size = (16 + 1) * DEF_DS18B20_MAX_PER_BUS ;
   char *addr_ptr=td->addr_buf ;
   unsigned char dev[8] ;        // buffer to help us sprintf() dev addr
 
