@@ -111,146 +111,156 @@ struct td_sensors {
 typedef struct td_sensors S_td_sensors ;
 
 /*
-   This function is called from "f_sensors_cmd()". Our job is to call the
-   specified "cur_f" function with data params "cur_d". The following sensor
-   functions are supported.
-
-     - aread()
-     - f_sensor_dht22()
-     - f_sensor_ds18b20()
+   This function is called from "f_sensors_cmd()" when the current function is
+   identified to be an "aread".
 */
 
-void f_sensor_function(struct td_sensors *td)
+void f_sfunction_aread(struct td_sensors *td)
 {
+  int in_pin = atoi(td->cur_d) ;
   S_ThreadResult *res = G_runtime->utask[td->t_idx].result ;
 
-  if (strcmp(td->cur_f, "aread") == 0)                  // aread()
-  {
-    int in_pin = atoi(td->cur_d) ;
+  // if this is the first time writing into "result[]", then we'll need to
+  // parse our "label_base[]" and setup "l_name" and "l_data" fields.
 
-    // if this is the first time writing into "result[]", then we'll need to
-    // parse our "label_base[]" and setup "l_name" and "l_data" fields.
-
-    if (td->cur_result == td->total_results)
-    {
-      int label_idx=0 ;
-      char *p, *token ;
-      token = strtok_r(td->label_base[td->cur_function], ",", &p) ;
-      while (token)
-      {
-        // "token" is typically in the format "label=value"
-
-        char *pos = strchr(token, '=') ;
-        if (pos)
-        {
-          *pos = 0 ;
-          res[td->cur_result].l_name[label_idx] = token ;
-          res[td->cur_result].l_data[label_idx] = pos + 1 ;
-        }
-        token = strtok_r(NULL, ",", &p) ;
-        label_idx++ ;
-      }
-      td->total_results++ ;     // indicate this result is now initialized
-    }
-
-    res[td->cur_result].i_value = analogRead(in_pin) ;
-    res[td->cur_result].result_type = UTHREAD_RESULT_INT ;
-
-    td->cur_result++ ;          // move this on to the next insertion point
-  }
-
-  if (strcmp(td->cur_f, "f_sensor_ds18b20") == 0)       // f_sensor_ds18b20()
+  if (td->cur_result == td->total_results)
   {
     int label_idx=0 ;
-    int data_pin = atoi(td->cur_d) ;
-    float temperatures[DEF_DS18B20_MAX_PER_BUS] ;
-    unsigned char addrs[DEF_DS18B20_MAX_PER_BUS * 8] ;  // 8 bytes per sensor
-
-    memset(addrs, 0, DEF_DS18B20_MAX_PER_BUS * 8) ;
-    int total_devs = f_sensor_ds18b20(data_pin, temperatures, addrs) ;
-
-    // if this our first time writing into "result[]", we'll need to store
-    // the hex string addresses of DS18B20 units in heap memory. Since the
-    // current "label_base[]" entry points at "free" space, we'll use this
-    // area for storing the hex strings and move the current "label_base[]"
-    // forward. Note each hex address string needs 18 bytes (including NULL).
-
-    if (td->cur_result + total_devs >= td->total_results)
+    char *p, *token ;
+    token = strtok_r(td->label_base[td->cur_function], ",", &p) ;
+    while (token)
     {
-      int total_buf_size = 18 * total_devs ;
-      char *addr_hex = td->label_base[td->cur_function + 1] ; // next free area
-      td->label_base[td->cur_function + 1] = addr_hex + total_buf_size ;
+      // "token" is typically in the format "label=value"
 
-      for (int dev_idx=0 ; dev_idx < total_devs ; dev_idx++)
+      char *pos = strchr(token, '=') ;
+      if (pos)
       {
-        char *p, *token ;
-
-        // parse our "label_base[]" entry for the first result only. For all
-        // subsequent results, copy the "l_name" and "l_data" entries from the
-        // first result until we hit "address" for "l_name".
-
-        label_idx = 0 ;
-        if (dev_idx == 0)
-        {
-          token = strtok_r(td->label_base[td->cur_function], ",", &p) ;
-          while (token)
-          {
-            char *pos = strchr(token, '=') ;
-            if (pos)
-            {
-              *pos = 0 ;
-              res[td->cur_result].l_name[label_idx] = token ;
-              res[td->cur_result].l_data[label_idx] = pos + 1 ;
-            }
-            token = strtok_r(NULL, ",", &p) ;
-            label_idx++ ;
-          }
-        }
-        else
-        {
-          int first_result = td->cur_result - dev_idx ;
-          while (strcmp(res[first_result].l_name[label_idx], "address") != 0)
-          {
-            res[td->cur_result].l_name[label_idx] =
-              res[first_result].l_name[label_idx] ;
-            res[td->cur_result].l_data[label_idx] =
-              res[first_result].l_data[label_idx] ;
-            label_idx++ ;
-          }
-        }
-
-        // the last label is the "address", record down its "l_data" buffer.
-
-        res[td->cur_result].l_name[label_idx] = "address" ;
-        res[td->cur_result].l_data[label_idx] = addr_hex ;
-
-        addr_hex = addr_hex + 18 ;
-        td->total_results++ ;
-        td->cur_result++ ;
+        *pos = 0 ;
+        res[td->cur_result].l_name[label_idx] = token ;
+        res[td->cur_result].l_data[label_idx] = pos + 1 ;
       }
-
-      // we're done initializing result labels. Move "cur_result" backwards
-      // so that we can start filling sensor data.
-
-      td->cur_result = td->cur_result - total_devs ;
+      token = strtok_r(NULL, ",", &p) ;
+      label_idx++ ;
     }
+    td->total_results++ ;     // indicate this result is now initialized
+  }
 
-    // now copy the sensor's addr and readings into the "result[]". Before we
-    // can do that, find the "label_idx" which points to "address".
+  res[td->cur_result].i_value = analogRead(in_pin) ;
+  res[td->cur_result].result_type = UTHREAD_RESULT_INT ;
 
-    for (label_idx=0 ; label_idx < DEF_MAX_THREAD_LABELS ; label_idx++)
-      if (strcmp(res[td->cur_result].l_name[label_idx], "address") == 0)
-        break ;
+  td->cur_result++ ;          // move this on to the next insertion point
+}
+
+/*
+   This function is called from "f_sensors_cmd()" when the current function is
+   identified to be an "f_sensor_dht22".
+*/
+
+void f_sfunction_dht22(struct td_sensors *td)
+{
+
+
+
+
+}
+
+/*
+   This function is called from "f_sensors_cmd()" when the current function is
+   identified to be an "f_sensor_ds18b20".
+*/
+
+void f_sfunction_ds18b20(struct td_sensors *td)
+{
+  int label_idx=0 ;
+  int data_pin = atoi(td->cur_d) ;
+  float temperatures[DEF_DS18B20_MAX_PER_BUS] ;
+  unsigned char addrs[DEF_DS18B20_MAX_PER_BUS * 8] ;  // 8 bytes per sensor
+  S_ThreadResult *res = G_runtime->utask[td->t_idx].result ;
+
+  memset(addrs, 0, DEF_DS18B20_MAX_PER_BUS * 8) ;
+  int total_devs = f_sensor_ds18b20(data_pin, temperatures, addrs) ;
+
+  // if this our first time writing into "result[]", we'll need to store
+  // the hex string addresses of DS18B20 units in heap memory. Since the
+  // current "label_base[]" entry points at "free" space, we'll use this
+  // area for storing the hex strings and move the current "label_base[]"
+  // forward. Note each hex address string needs 18 bytes (including NULL).
+
+  if (td->cur_result + total_devs >= td->total_results)
+  {
+    int total_buf_size = 18 * total_devs ;
+    char *addr_hex = td->label_base[td->cur_function + 1] ; // next free area
+    td->label_base[td->cur_function + 1] = addr_hex + total_buf_size ;
+
     for (int dev_idx=0 ; dev_idx < total_devs ; dev_idx++)
     {
-      char *dev = (char*) addrs + (dev_idx * 8) ;
-      sprintf(res[td->cur_result].l_data[label_idx],
-              "%02x%02x%02x%02x%02x%02x%02x%02x",
-              dev[0], dev[1], dev[2], dev[3], dev[4], dev[5], dev[6], dev[7]) ;
-      res[td->cur_result].f_value = temperatures[dev_idx] ;
-      res[td->cur_result].result_type = UTHREAD_RESULT_FLOAT ;
+      char *p, *token ;
+
+      // parse our "label_base[]" entry for the first result only. For all
+      // subsequent results, copy the "l_name" and "l_data" entries from the
+      // first result until we hit "address" for "l_name".
+
+      label_idx = 0 ;
+      if (dev_idx == 0)
+      {
+        token = strtok_r(td->label_base[td->cur_function], ",", &p) ;
+        while (token)
+        {
+          char *pos = strchr(token, '=') ;
+          if (pos)
+          {
+            *pos = 0 ;
+            res[td->cur_result].l_name[label_idx] = token ;
+            res[td->cur_result].l_data[label_idx] = pos + 1 ;
+          }
+          token = strtok_r(NULL, ",", &p) ;
+          label_idx++ ;
+        }
+      }
+      else
+      {
+        int first_result = td->cur_result - dev_idx ;
+        while (strcmp(res[first_result].l_name[label_idx], "address") != 0)
+        {
+          res[td->cur_result].l_name[label_idx] =
+            res[first_result].l_name[label_idx] ;
+          res[td->cur_result].l_data[label_idx] =
+            res[first_result].l_data[label_idx] ;
+          label_idx++ ;
+        }
+      }
+
+      // the last label is the "address", record down its "l_data" buffer.
+
+      res[td->cur_result].l_name[label_idx] = "address" ;
+      res[td->cur_result].l_data[label_idx] = addr_hex ;
+
+      addr_hex = addr_hex + 18 ;
+      td->total_results++ ;
       td->cur_result++ ;
     }
+
+    // we're done initializing result labels. Move "cur_result" backwards
+    // so that we can start filling sensor data.
+
+    td->cur_result = td->cur_result - total_devs ;
+  }
+
+  // now copy the sensor's addr and readings into the "result[]". Before we
+  // can do that, find the "label_idx" which points to "address".
+
+  for (label_idx=0 ; label_idx < DEF_MAX_THREAD_LABELS ; label_idx++)
+    if (strcmp(res[td->cur_result].l_name[label_idx], "address") == 0)
+      break ;
+  for (int dev_idx=0 ; dev_idx < total_devs ; dev_idx++)
+  {
+    char *dev = (char*) addrs + (dev_idx * 8) ;
+    sprintf(res[td->cur_result].l_data[label_idx],
+            "%02x%02x%02x%02x%02x%02x%02x%02x",
+            dev[0], dev[1], dev[2], dev[3], dev[4], dev[5], dev[6], dev[7]) ;
+    res[td->cur_result].f_value = temperatures[dev_idx] ;
+    res[td->cur_result].result_type = UTHREAD_RESULT_FLOAT ;
+    td->cur_result++ ;
   }
 }
 
@@ -335,7 +345,15 @@ void f_sensors_cmd(struct td_sensors *td, char *cur_cmd)
       memcpy(td->label_base[fn_idx], l, strlen(l)) ;
       td->label_base[fn_idx + 1] = td->label_base[fn_idx] + strlen(l) + 1 ;
     }
-    f_sensor_function(td) ;             // now execute sensor function
+
+    // now decide which sensor function we'll execute
+
+    if (strcmp(f, "aread") == 0)
+      f_sfunction_aread(td) ;
+    if (strcmp(f, "f_sensor_dht22") == 0)
+      f_sfunction_dht22(td) ;
+    if (strcmp(f, "f_sensor_ds18b20") == 0)
+      f_sfunction_ds18b20(td) ;
   }
 }
 
