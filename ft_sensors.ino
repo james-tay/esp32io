@@ -111,6 +111,39 @@ struct td_sensors {
 typedef struct td_sensors S_td_sensors ;
 
 /*
+   This function is called from "f_sfunction_xx()" functions. When these
+   functions run for the first time, they need to initialize the labels in
+   their results. That's where this function comes in. It parses the user
+   supplied labels and updates the result's "l_name" and "l_data" pointers.
+   On completion, the number of labels parsed is returned.
+*/
+
+int f_sensor_init_labels(struct td_sensors *td)
+{
+  int label_idx=0 ;
+  char *p, *token ;
+  S_ThreadResult *res = G_runtime->utask[td->t_idx].result ;
+
+  token = strtok_r(td->label_base[td->cur_function], ",", &p) ;
+  while (token)
+  {
+    // note that "token" is typically in the format "label=value", parse it
+    // into the current result's "l_name" and "l_data".
+
+    char *pos = strchr(token, '=') ;
+    if (pos)
+    {
+      *pos = 0 ;
+      res[td->cur_result].l_name[label_idx] = token ;
+      res[td->cur_result].l_data[label_idx] = pos + 1 ;
+      label_idx++ ;
+    }
+    token = strtok_r(NULL, ",", &p) ;
+  }
+  return(label_idx) ;
+}
+
+/*
    This function is called from "f_sensors_cmd()" when the current function is
    identified to be an "aread".
 */
@@ -125,28 +158,15 @@ void f_sfunction_aread(struct td_sensors *td)
 
   if (td->cur_result == td->total_results)
   {
-    int label_idx=0 ;
-    char *p, *token ;
-    token = strtok_r(td->label_base[td->cur_function], ",", &p) ;
-    while (token)
-    {
-      // "token" is typically in the format "label=value"
-
-      char *pos = strchr(token, '=') ;
-      if (pos)
-      {
-        *pos = 0 ;
-        res[td->cur_result].l_name[label_idx] = token ;
-        res[td->cur_result].l_data[label_idx] = pos + 1 ;
-      }
-      token = strtok_r(NULL, ",", &p) ;
-      label_idx++ ;
-    }
-    td->total_results++ ;     // indicate this result is now initialized
+    f_sensor_init_labels(td) ;
+    td->total_results++ ; // this indicates the result has been initialized
   }
 
   res[td->cur_result].i_value = analogRead(in_pin) ;
   res[td->cur_result].result_type = UTHREAD_RESULT_INT ;
+  if (G_runtime->config.debug)
+    Serial.printf("DEBUG: f_sfunction_aread() in_pin:%d value:%d\r\n",
+                  in_pin, res[td->cur_result].i_value) ;
 
   td->cur_result++ ;          // move this on to the next insertion point
 }
@@ -158,10 +178,24 @@ void f_sfunction_aread(struct td_sensors *td)
 
 void f_sfunction_dht22(struct td_sensors *td)
 {
+  int data_pin = atoi(td->cur_d) ;
+  S_ThreadResult *res = G_runtime->utask[td->t_idx].result ;
+
+  // if this is the first time writing into "result[]", then we'll need to
+  // parse our "label_base[]" and setup "l_name" and "l_data" fields.
+
+  if (td->cur_result == td->total_results)
+  {
+    f_sensor_init_labels(td) ;
+    td->total_results++ ; // this indicates the result has been initialized
+  }
 
 
 
 
+
+  if (G_runtime->config.debug)
+    Serial.printf("DEBUG: f_sfunction_dht22()\r\n") ;
 }
 
 /*
@@ -202,21 +236,7 @@ void f_sfunction_ds18b20(struct td_sensors *td)
 
       label_idx = 0 ;
       if (dev_idx == 0)
-      {
-        token = strtok_r(td->label_base[td->cur_function], ",", &p) ;
-        while (token)
-        {
-          char *pos = strchr(token, '=') ;
-          if (pos)
-          {
-            *pos = 0 ;
-            res[td->cur_result].l_name[label_idx] = token ;
-            res[td->cur_result].l_data[label_idx] = pos + 1 ;
-          }
-          token = strtok_r(NULL, ",", &p) ;
-          label_idx++ ;
-        }
-      }
+        label_idx = f_sensor_init_labels(td) ;
       else
       {
         int first_result = td->cur_result - dev_idx ;
@@ -236,8 +256,8 @@ void f_sfunction_ds18b20(struct td_sensors *td)
       res[td->cur_result].l_data[label_idx] = addr_hex ;
 
       addr_hex = addr_hex + 18 ;
-      td->total_results++ ;
       td->cur_result++ ;
+      td->total_results++ ; // this indicates the result has been initialized
     }
 
     // we're done initializing result labels. Move "cur_result" backwards
@@ -262,6 +282,9 @@ void f_sfunction_ds18b20(struct td_sensors *td)
     res[td->cur_result].result_type = UTHREAD_RESULT_FLOAT ;
     td->cur_result++ ;
   }
+  if (G_runtime->config.debug)
+    Serial.printf("DEBUG: f_sfunction_ds18b20() data_pin:%d total_devs:%d\r\n",
+                  data_pin, total_devs) ;
 }
 
 /*
