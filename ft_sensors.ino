@@ -94,6 +94,17 @@
    "results[]" array (and all its "l_name" and "l_data" pointers).
 */
 
+/*
+   The following structure is malloc'ed by "ft_sensors()" for its "malloc_buf".
+   It is essentially the global memory shared among the "ft_sensors()" thread
+   and all the "f_sfunction_xx()" calls. As we progress through the user
+   supplied statements, "cur_result" starts from 0 and is incremented as the
+   various "f_sfunction_xx()" calls obtain results. The "f_sfunction_xx()"
+   calls also track "total_results", and use this to identify uninitialized
+   results, which would typically require them calling "f_sensor_init_labels()"
+   which sets up their result's "l_name" and "l_data" fields.
+*/
+
 struct td_sensors {
   char *cur_f ;                                 // user supplied function name
   char *cur_d ;                                 // current data params
@@ -115,7 +126,9 @@ typedef struct td_sensors S_td_sensors ;
    functions run for the first time, they need to initialize the labels in
    their results. That's where this function comes in. It parses the user
    supplied labels and updates the result's "l_name" and "l_data" pointers.
-   On completion, the number of labels parsed is returned.
+   On completion, the number of labels parsed is returned. Note that this
+   function modifies the current "label_base[]" buffer, thus it can only be
+   called ONCE per "label_base[]" entry.
 */
 
 int f_sensor_init_labels(struct td_sensors *td)
@@ -139,6 +152,31 @@ int f_sensor_init_labels(struct td_sensors *td)
       label_idx++ ;
     }
     token = strtok_r(NULL, ",", &p) ;
+  }
+  return(label_idx) ;
+}
+
+/*
+   This function is called from "s_sfunction_xx()" functions when multiple
+   results are involved. Recall that "f_sensor_init_labels()" can only be
+   called once by each "s_sfunction_xx()". Thus, if multiple results are
+   involved, this function helps copy "l_name" and "l_data" entries from
+   the specified "first" result, up to but not including the "l_name" with
+   "end" into the "cur_result". The number of labels copied is returned.
+*/
+
+int f_sensor_copy_labels_until(struct td_sensors *td, int first, char *end)
+{
+  int label_idx = 0 ;
+  S_ThreadResult *res = G_runtime->utask[td->t_idx].result ;
+
+  while ((label_idx < DEF_MAX_THREAD_LABELS) &&
+         (res[first].l_name[label_idx] != NULL) &&
+         (strcmp(res[first].l_name[label_idx], end) != 0))
+  {
+    res[td->cur_result].l_name[label_idx] = res[first].l_name[label_idx] ;
+    res[td->cur_result].l_data[label_idx] = res[first].l_data[label_idx] ;
+    label_idx++ ;
   }
   return(label_idx) ;
 }
@@ -186,16 +224,39 @@ void f_sfunction_dht22(struct td_sensors *td)
 
   if (td->cur_result == td->total_results)
   {
-    f_sensor_init_labels(td) ;
-    td->total_results++ ; // this indicates the result has been initialized
+    int label_idx = f_sensor_init_labels(td) ;
+    res[td->cur_result].l_name[label_idx] = "measurement" ;
+    res[td->cur_result].l_data[label_idx] = "temperature" ;
+    td->total_results++ ;
+    td->cur_result++ ;          // move forward to configure next result
+
+    // copy the "l_name" and "l_data" from the first result into the next
+
+    label_idx = f_sensor_copy_labels_until(td, td->cur_result - 1,
+                                           "measurement") ;
+
+    res[td->cur_result].l_name[label_idx] = "measurement" ;
+    res[td->cur_result].l_data[label_idx] = "humidity" ;
+
+    td->total_results++ ;
+    td->cur_result-- ;          // move next result insertion point back
   }
 
-
-
-
+  char err[BUF_LEN_ERR] ;
+  float temperature=0.0, humidity=0.0 ;
+  if (f_sensor_dht22(data_pin, &temperature, &humidity, err))
+  {
+    res[td->cur_result].f_value = temperature ;
+    res[td->cur_result].result_type = UTHREAD_RESULT_FLOAT ;
+    td->cur_result++ ;
+    res[td->cur_result].f_value = humidity ;
+    res[td->cur_result].result_type = UTHREAD_RESULT_FLOAT ;
+    td->cur_result++ ;
+  }
 
   if (G_runtime->config.debug)
-    Serial.printf("DEBUG: f_sfunction_dht22()\r\n") ;
+    Serial.printf("DEBUG: f_sfunction_dht22() t:%.3fC h:%.3f%%\r\n",
+                  temperature, humidity) ;
 }
 
 /*
@@ -239,15 +300,8 @@ void f_sfunction_ds18b20(struct td_sensors *td)
         label_idx = f_sensor_init_labels(td) ;
       else
       {
-        int first_result = td->cur_result - dev_idx ;
-        while (strcmp(res[first_result].l_name[label_idx], "address") != 0)
-        {
-          res[td->cur_result].l_name[label_idx] =
-            res[first_result].l_name[label_idx] ;
-          res[td->cur_result].l_data[label_idx] =
-            res[first_result].l_data[label_idx] ;
-          label_idx++ ;
-        }
+        int first_idx = td->cur_result - dev_idx ;
+        label_idx = f_sensor_copy_labels_until(td, first_idx, "address") ;
       }
 
       // the last label is the "address", record down its "l_data" buffer.
