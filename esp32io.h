@@ -168,7 +168,6 @@ struct camera_data {
 // a single result in a user thread, to be exposed as a metric
 
 struct thread_result {
-  int num_labels ;                      // number of labels for this metric
   char *l_name[DEF_MAX_THREAD_LABELS] ; // array of pointers to label names
   char *l_data[DEF_MAX_THREAD_LABELS] ; // array of pointers to label values
   char result_type ;                    // whether result is "int" or "float"

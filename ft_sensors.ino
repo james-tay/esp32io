@@ -11,8 +11,9 @@
 
    This is the motivation behind the "ft_sensors()" user task thread. The
    standard configuration supplied to this function includes the overall
-   polling frequency (eg, every 60 secs), and the file which configures each
-   polling cycle. Thus each line in this file would tell us,
+   polling frequency (eg, every 60 secs), and the file which configures tasks
+   to be performed on each polling cycle. Thus each line in this file would
+   tell us,
 
      - what preparation to perform (eg, power up a group of sensors)
      - the sensor function to call
@@ -89,9 +90,13 @@
    Some sensor functions may return multiple results (eg, multiple DS18B20
    units on a single bus). If a particular sensor drops off the bus, this can
    lead to a misalignment of "result[]" values. To mitigate this situation,
-   we track "total_results" at the end of each sensor poll cycle against the
-   "prev_results" value. If there is a mismatch, we must reinitialize the
-   "results[]" array (and all its "l_name" and "l_data" pointers).
+   we check "cur_result" against "total_results" at the end of each sensor poll
+   cycle. If there is a mismatch, we must reinitialize "S_td_sensors" structure
+   and the thread's "results[]" array (and all its "l_name" and "l_data"
+   pointers). If the sensor subsequently recovers, we will get a higher number
+   of results, which is detected by comparing against "prev_results". This too
+   triggers a reinitialization of "S_td_sensors" and the thread's "result[]"
+   array.
 */
 
 /*
@@ -115,7 +120,8 @@ struct td_sensors {
   int total_results ;                           // current total sensor results
   int prev_results ;                            // results from previous run
   int t_idx ;                                   // our user task thread index
-  long long next_run ;                          // usecs timestamp
+  long long next_run ;                          // usecs timestamp of next run
+  long long ts_init ;                           // this struct's init time
   char *label_base[DEF_MAX_THREAD_RESULTS] ;    // pointers into "label_buf"
   char label_buf[BUF_LEN_UTASK_FILESIZE] ;      // all labels here
 } ;
@@ -324,7 +330,8 @@ void f_sfunction_ds18b20(struct td_sensors *td)
   // can do that, find the "label_idx" which points to "address".
 
   for (label_idx=0 ; label_idx < DEF_MAX_THREAD_LABELS ; label_idx++)
-    if (strcmp(res[td->cur_result].l_name[label_idx], "address") == 0)
+    if ((res[td->cur_result].l_name[label_idx] != NULL) &&
+        (strcmp(res[td->cur_result].l_name[label_idx], "address") == 0))
       break ;
   for (int dev_idx=0 ; dev_idx < total_devs ; dev_idx++)
   {
@@ -435,6 +442,36 @@ void f_sensors_cmd(struct td_sensors *td, char *cur_cmd)
 }
 
 /*
+   This function is called from "ft_sensors()". It wipes and initializes the
+   S_td_sensors structure at the supplied "td" address.
+*/
+
+void f_init_thread_data (struct td_sensors *td, S_UserThread *self)
+{
+  memset(td, 0, sizeof(S_td_sensors)) ;
+  for (int t_idx=0 ; t_idx < DEF_MAX_USER_THREADS ; t_idx++)
+    if (&G_runtime->utask[t_idx] == self)
+    {
+      td->t_idx = t_idx ;
+      break ;
+    }
+  td->num_functions = -1 ;                      // set to invalid/uninitialized
+  td->prev_results = -1 ;                       // set to invalid/uninitialized
+  td->label_base[0] = td->label_buf ;           // point to start of buffer
+  td->next_run = esp_timer_get_time() ;         // set this to now essentially
+  td->ts_init = td->next_run ;                  // used to track (re)init
+
+  // now wipe any previous "result[]" data
+
+  memset(G_runtime->utask[td->t_idx].result, 0,
+         DEF_MAX_THREAD_RESULTS * sizeof(S_ThreadResult)) ;
+
+  if (G_runtime->config.debug)
+    Serial.printf("DEBUG: f_init_thread_data() initialized with t_idx:%d\r\n",
+                  td->t_idx) ;
+}
+
+/*
    This function is called from "f_user_thread_lifecycle()". Its job is to
    parse its supplied file, acting on each task, line by line.
 */
@@ -467,27 +504,8 @@ void ft_sensors(S_UserThread *self)
       self->state = UTHREAD_STOPPED ;
       return ;
     }
-    memset(self->malloc_buf, 0, sizeof(S_td_sensors)) ;
     td = (S_td_sensors*) self->malloc_buf ;
-    td->t_idx = -1 ;
-    td->num_functions = -1 ;
-    td->label_base[0] = td->label_buf ;
-    td->next_run = esp_timer_get_time() ;
-
-    // identify our user task thread index (needed for job dispatch later)
-
-    for (t_idx=0 ; t_idx < DEF_MAX_USER_THREADS ; t_idx++)
-      if (&G_runtime->utask[t_idx] == self)
-      {
-        td->t_idx = t_idx ;
-        break ;
-      }
-    if (t_idx == DEF_MAX_USER_THREADS)
-    {
-      strncpy(self->status, "Cannot find t_idx", BUF_LEN_UTHREAD_STATUS) ;
-      self->state = UTHREAD_STOPPED ;
-      return ;
-    }
+    f_init_thread_data(td, self) ;
     self->state = UTHREAD_RUNNING ;     // results are exposed once this is set
   }
   td = (S_td_sensors*) self->malloc_buf ;
@@ -531,14 +549,34 @@ void ft_sensors(S_UserThread *self)
     cur_cmd = f_get_statement(NULL, &p) ;       // move on to next task
   }
 
-  // end of sensor poll cycle. Update our status and take a nap
+  if (td->prev_results < 0)                     // do a one time init
+    td->prev_results = td->total_results ;
 
-  td->next_run = td->next_run + (interval_secs * 1000000) ;
-  long nap_ms = (td->next_run - esp_timer_get_time()) / 1000 ;
-  if (nap_ms < 1)
-    nap_ms = 1 ;
-  snprintf(self->status, BUF_LEN_UTHREAD_STATUS,
-           "funtions:%d results:%d nap:%ldms",
-           td->num_functions, td->total_results, nap_ms) ;
-  delay(nap_ms) ;
+  // if the number of results we obtained changed, then we wither had a sensor
+  // failure, or a sensor recovery. Either way, reinitialize "td" to force a
+  // re-probe.
+
+  if ((td->cur_result != td->total_results) ||
+      (td->total_results != td->prev_results))
+  {
+    if (G_runtime->config.debug)
+      Serial.printf("DEBUG: ft_sensors() cur_result:%d total_results:%d\r\n",
+                    td->cur_result, td->total_results) ;
+
+    f_init_thread_data(td, self) ;
+  }
+  else
+  {
+    // end of sensor poll cycle. Update our status and take a nap
+
+    td->prev_results = td->total_results ;
+    td->next_run = td->next_run + (interval_secs * 1000000) ;
+    long nap_ms = (td->next_run - esp_timer_get_time()) / 1000 ;
+    if (nap_ms < 1)
+      nap_ms = 1 ;
+    snprintf(self->status, BUF_LEN_UTHREAD_STATUS,
+             "f:%d r:%d nap:%ldms init:%lld",
+             td->num_functions, td->total_results, nap_ms, td->ts_init) ;
+    delay(nap_ms) ;
+  }
 }
