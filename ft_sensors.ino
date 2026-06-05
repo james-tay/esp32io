@@ -113,7 +113,6 @@
 struct td_sensors {
   char *cur_f ;                                 // user supplied function name
   char *cur_d ;                                 // current data params
-  char *cur_l ;                                 // current metric labels
   int cur_function ;                            // current "f:..." statement
   int num_functions ;                           // total "f:.." statements
   int cur_result ;                              // current sensor result index
@@ -194,6 +193,8 @@ int f_sensor_copy_labels_until(struct td_sensors *td, int first, char *end)
 
 void f_sfunction_aread(struct td_sensors *td)
 {
+  if (td->cur_d == NULL)                        // fatal ! pin not specified
+    return ;
   int in_pin = atoi(td->cur_d) ;
   S_ThreadResult *res = G_runtime->utask[td->t_idx].result ;
 
@@ -216,12 +217,61 @@ void f_sfunction_aread(struct td_sensors *td)
 }
 
 /*
+   This function is called from "f_sensors_cmd()" when the current function
+   is identified to be an "f_sensor_bmp180".
+*/
+
+void f_sfunction_bmp180(struct td_sensors *td)
+{
+  S_ThreadResult *res = G_runtime->utask[td->t_idx].result ;
+
+  // if this is the first time writing into "result[]", then we'll need to
+  // parse our "label_base[]" and setup "l_name" and "l_data" fields.
+
+  if (td->cur_result == td->total_results)
+  {
+    int label_idx = f_sensor_init_labels(td) ;
+    res[td->cur_result].l_name[label_idx] = "measurement" ;
+    res[td->cur_result].l_data[label_idx] = "temperature" ;
+    td->total_results++ ;
+    td->cur_result++ ;          // move forward to configure next result
+
+    // copy the "l_name" and "l_data" from the first result into the next
+
+    label_idx = f_sensor_copy_labels_until(td, td->cur_result - 1,
+                                           "measurement") ;
+    res[td->cur_result].l_name[label_idx] = "measurement" ;
+    res[td->cur_result].l_data[label_idx] = "pressure" ;
+
+    td->total_results++ ;
+    td->cur_result-- ;          // move next result insertion point back
+  }
+
+  float temperature=0.0, pressure=0.0 ;
+  if (f_bmp180(&temperature, &pressure))
+  {
+    res[td->cur_result].f_value = temperature ;
+    res[td->cur_result].result_type = UTHREAD_RESULT_FLOAT ;
+    td->cur_result++ ;
+    res[td->cur_result].f_value = pressure;
+    res[td->cur_result].result_type = UTHREAD_RESULT_FLOAT ;
+    td->cur_result++ ;
+  }
+
+  if (G_runtime->config.debug)
+    Serial.printf("DEBUG: f_sfunction_bmp180() t:%.3fC p:%.3fhpa\r\n",
+                  temperature, pressure) ;
+}
+
+/*
    This function is called from "f_sensors_cmd()" when the current function is
    identified to be an "f_sensor_dht22".
 */
 
 void f_sfunction_dht22(struct td_sensors *td)
 {
+  if (td->cur_d == NULL)                        // fatal ! pin not specified
+    return ;
   int data_pin = atoi(td->cur_d) ;
   S_ThreadResult *res = G_runtime->utask[td->t_idx].result ;
 
@@ -240,7 +290,6 @@ void f_sfunction_dht22(struct td_sensors *td)
 
     label_idx = f_sensor_copy_labels_until(td, td->cur_result - 1,
                                            "measurement") ;
-
     res[td->cur_result].l_name[label_idx] = "measurement" ;
     res[td->cur_result].l_data[label_idx] = "humidity" ;
 
@@ -272,6 +321,9 @@ void f_sfunction_dht22(struct td_sensors *td)
 
 void f_sfunction_ds18b20(struct td_sensors *td)
 {
+  if (td->cur_d == NULL)                        // fatal ! pin not specified
+    return ;
+
   int label_idx=0 ;
   int data_pin = atoi(td->cur_d) ;
   float temperatures[DEF_DS18B20_MAX_PER_BUS] ;
@@ -410,11 +462,10 @@ void f_sensors_cmd(struct td_sensors *td, char *cur_cmd)
     }
   }
 
-  if ((f) && (d) && (l))
+  if (f)
   {
     td->cur_f = f ;             // function name
     td->cur_d = d ;             // data params
-    td->cur_l = l ;             // metric labels
     td->cur_function++ ;
 
     // if this is the first time we're encounting this function, then copy
@@ -434,6 +485,8 @@ void f_sensors_cmd(struct td_sensors *td, char *cur_cmd)
 
     if (strcmp(f, "aread") == 0)
       f_sfunction_aread(td) ;
+    if (strcmp(f, "f_bmp180") == 0)
+      f_sfunction_bmp180(td) ;
     if (strcmp(f, "f_sensor_dht22") == 0)
       f_sfunction_dht22(td) ;
     if (strcmp(f, "f_sensor_ds18b20") == 0)
