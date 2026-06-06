@@ -218,6 +218,62 @@ void f_sfunction_aread(struct td_sensors *td)
 
 /*
    This function is called from "f_sensors_cmd()" when the current function
+   is identified to be an "f_sensor_bme280".
+*/
+
+void f_sfunction_bme280(struct td_sensors *td)
+{
+  S_ThreadResult *res = G_runtime->utask[td->t_idx].result ;
+
+  // if this is the first time writing into "result[]", then we'll need to
+  // parse our "label_base[]" and setup "l_name" and "l_data" fields.
+
+  if (td->cur_result == td->total_results)
+  {
+    int label_idx = f_sensor_init_labels(td) ;
+    res[td->cur_result].l_name[label_idx] = "measurement" ;
+    res[td->cur_result].l_data[label_idx] = "temperature" ;
+    td->total_results++ ;
+    td->cur_result++ ;          // move forward to configure next result
+
+    // copy the "l_name" and "l_data" from the first result into the next
+
+    label_idx = f_sensor_copy_labels_until(td, td->cur_result - 1,
+                                           "measurement") ;
+    res[td->cur_result].l_name[label_idx] = "measurement" ;
+    res[td->cur_result].l_data[label_idx] = "humidity" ;
+    td->total_results++ ;
+    td->cur_result++ ;
+
+    label_idx = f_sensor_copy_labels_until(td, td->cur_result - 1,
+                                           "measurement") ;
+    res[td->cur_result].l_name[label_idx] = "measurement" ;
+    res[td->cur_result].l_data[label_idx] = "pressure" ;
+    td->total_results++ ;
+    td->cur_result = td->cur_result - 2 ; // move result insertion point back
+  }
+
+  float temperature=0.0, humidity=0.0, pressure=0.0 ;
+  if (f_bme280(&temperature, &humidity, &pressure))
+  {
+    res[td->cur_result].f_value = temperature ;
+    res[td->cur_result].result_type = UTHREAD_RESULT_FLOAT ;
+    td->cur_result++ ;
+    res[td->cur_result].f_value = humidity ;
+    res[td->cur_result].result_type = UTHREAD_RESULT_FLOAT ;
+    td->cur_result++ ;
+    res[td->cur_result].f_value = pressure ;
+    res[td->cur_result].result_type = UTHREAD_RESULT_FLOAT ;
+    td->cur_result++ ;
+  }
+
+  if (G_runtime->config.debug)
+    Serial.printf("DEBUG: f_sfunction_bme280() t:%.3fC h:%.3f%% p:%.3fhpa\r\n",
+                  temperature, humidity, pressure) ;
+}
+
+/*
+   This function is called from "f_sensors_cmd()" when the current function
    is identified to be an "f_sensor_bmp180".
 */
 
@@ -253,7 +309,7 @@ void f_sfunction_bmp180(struct td_sensors *td)
     res[td->cur_result].f_value = temperature ;
     res[td->cur_result].result_type = UTHREAD_RESULT_FLOAT ;
     td->cur_result++ ;
-    res[td->cur_result].f_value = pressure;
+    res[td->cur_result].f_value = pressure ;
     res[td->cur_result].result_type = UTHREAD_RESULT_FLOAT ;
     td->cur_result++ ;
   }
@@ -453,7 +509,7 @@ void f_sensors_cmd(struct td_sensors *td, char *cur_cmd)
       // if we're here, that means worker "tid" has completed "cur_cmd"
 
       if (G_runtime->config.debug)
-        Serial.printf("DEBUG: f_sensors_cmd() c:%s -> %d:%s", c,
+        Serial.printf("DEBUG: f_sensors_cmd() c:%s [code:%d] %s", c,
                       G_runtime->worker[tid].result_code,
                       G_runtime->worker[tid].result_msg) ;
 
@@ -485,6 +541,8 @@ void f_sensors_cmd(struct td_sensors *td, char *cur_cmd)
 
     if (strcmp(f, "aread") == 0)
       f_sfunction_aread(td) ;
+    if (strcmp(f, "f_bme280") == 0)
+      f_sfunction_bme280(td) ;
     if (strcmp(f, "f_bmp180") == 0)
       f_sfunction_bmp180(td) ;
     if (strcmp(f, "f_sensor_dht22") == 0)
