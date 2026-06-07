@@ -188,3 +188,73 @@ At this point, a (jpeg) camera frame can be accessed at,
 wget -O sample.jpg http://<esp32-cam>/cam
 ```
 
+## MQTT Events
+
+Instead of performing periodic polling, there may be situations where we want
+to know when a state change occurs. For example, we may want to use MQTT to
+publish button press/release events. To configure MQTT, we first create a
+file which holds the configuration for connecting to our MQTT server, and
+another file which configures the topic which we'll publish to.
+
+```
+$ curl http://<esp32>/v1?cmd=fs+write+/mqtt_setup.cfg+myuser:mypasswd@mqtt.server.com:1883
+$ curl http://<esp32>/v1?cmd=fs+write+/mqtt_topic.cfg+homenet/events
+```
+
+In the following example, a button is connected to GPIO21. We create a
+`ft_dread` thread which polls every 100ms, but ignores transient state changes
+under 400ms. Since this is just a button, no other pin (ie, the `-1` param) is
+required to deliver power to the device. We do however use the ESP32's internal
+pull up resistor (ie, the `1` param).
+
+```
+$ curl http://<esp32>/v1?cmd=fs+write+/button1.thread+ft_dread:0,100,21,-1,1,400
+$ curl http://<esp32>/v1?cmd=task+start+button1
+```
+
+In this example, our button is normally open. Because we've engaged the ESP32's
+built-in pull up resistor, GPIO1 will be normally high. At this point, if we
+press the button, the following message is published to the `homenet/events`
+topic,
+
+```
+button1{type="state"} 0
+```
+
+Upon releasing the button, the following message is published,
+
+```
+button1{type="state"} 1
+```
+
+Events published on MQTT are formatted to look like prometheus metrics. If
+we want to further customize the metric and labels in the MQTT message, we
+create a `/button1.labels` file as follows,
+
+```
+$ curl 'http://<esp32>/v1?cmd=fs+write+/button1.labels+sensor_door,model="magnetic",location="backyard-gate"'
+```
+
+At this point, when we press the button, the following message is published
+to the `homenet/events` topic,
+
+```
+sensor_door{model="magnetic",location="backyard-gate",type="state"} 0
+```
+
+Similarly, releasing the button emits the following message,
+
+```
+sensor_door{model="magnetic",location="backyard-gate",type="state"} 1
+```
+
+As always, we can scrape the ESP32 and the following metrics will be exposed,
+
+```
+$ curl http://<esp32>/metrics
+...
+sensor_door{model="magnetic",location="backyard-gate",type="state"} 1
+sensor_door{model="magnetic",location="backyard-gate",type="transients"} 0
+sensor_door{model="magnetic",location="backyard-gate",type="triggers"} 4
+```
+
