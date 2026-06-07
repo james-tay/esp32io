@@ -43,7 +43,7 @@
 
      c:         A command, any supported command may be executed
      f:         Function name. Only certain sensor functions are supported
-      d:        Function data. Depends on the sensor function
+      d:        Comma separated function data. Depends on the sensor function
       l:        Labels to be included in exposed metrics
 
    Currently, lines must begin with with a "c:" or a "f:". Also, note the
@@ -321,6 +321,48 @@ void f_sfunction_bmp180(struct td_sensors *td)
 
 /*
    This function is called from "f_sensors_cmd()" when the current function is
+   identified to be an "f_hcsr04".
+*/
+
+void f_sfunction_hcsr04(struct td_sensors *td)
+{
+  S_ThreadResult *res = G_runtime->utask[td->t_idx].result ;
+
+  // expect 2x data parameters, trigger pin and echo pin, eg, "17,18"
+
+  char line[BUF_LEN_LINE], *p ;
+  if ((td->cur_d == NULL) || (strchr(td->cur_d, ',') == NULL))
+    return ;                                    // fatal ! pins not specified
+  strncpy(line, td->cur_d, BUF_LEN_LINE) ;
+  p = strchr(td->cur_d, ',') ;
+  *p = 0 ;
+  int trig_pin = atoi(line) ;
+  int echo_pin = atoi(p+1) ;
+  float distance_cm = f_hcsr04(trig_pin, echo_pin) ;
+
+  // if this is the first time writing into "result[]", then we'll need to
+  // parse our "label_base[]" and setup "l_name" and "l_data" fields.
+
+  if (td->cur_result == td->total_results)
+  {
+    f_sensor_init_labels(td) ;
+    td->total_results++ ;
+  }
+
+  if (distance_cm > 0.0)
+  {
+    res[td->cur_result].f_value = distance_cm ;
+    res[td->cur_result].result_type = UTHREAD_RESULT_FLOAT ;
+    td->cur_result++ ;
+  }
+
+  if (G_runtime->config.debug)
+    Serial.printf("DEBUG: f_sfunction_hcsr04(): trig:%d echo:%d d:%.3fcm\r\n",
+                  trig_pin, echo_pin, distance_cm) ;
+}
+
+/*
+   This function is called from "f_sensors_cmd()" when the current function is
    identified to be an "f_sensor_dht22".
 */
 
@@ -539,15 +581,22 @@ void f_sensors_cmd(struct td_sensors *td, char *cur_cmd)
 
     // now decide which sensor function we'll execute
 
-    if (strcmp(f, "aread") == 0)
+    if (strcmp(f, "aread") == 0)                        // aread
       f_sfunction_aread(td) ;
-    if (strcmp(f, "f_bme280") == 0)
+    else
+    if (strcmp(f, "f_bme280") == 0)                     // BME280
       f_sfunction_bme280(td) ;
-    if (strcmp(f, "f_bmp180") == 0)
+    else
+    if (strcmp(f, "f_bmp180") == 0)                     // BMP180
       f_sfunction_bmp180(td) ;
-    if (strcmp(f, "f_sensor_dht22") == 0)
+    else
+    if (strcmp(f, "f_hcsr04") == 0)                     // HC-SR04
+      f_sfunction_hcsr04(td) ;
+    else
+    if (strcmp(f, "f_sensor_dht22") == 0)               // DHT22
       f_sfunction_dht22(td) ;
-    if (strcmp(f, "f_sensor_ds18b20") == 0)
+    else
+    if (strcmp(f, "f_sensor_ds18b20") == 0)             // DS18B20
       f_sfunction_ds18b20(td) ;
   }
 }

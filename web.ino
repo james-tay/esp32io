@@ -357,6 +357,21 @@ void f_handle_webrequest(int idx, char *method, char *uri)
     strcpy(G_runtime->url_params, p+1) ;
   }
 
+  // request for just '/'
+
+  if ((strcmp(method, "GET") == 0) && (strcmp(G_runtime->url_path, "/") == 0))
+  {
+    char *r1 = "HTTP/1.1 200\n" ;
+    char *r2 = "Content-Type: text/plain\n" ;
+    char *r3 = "Connection: close\n\n" ;
+    char *r4 = "OK\n" ;
+    write(G_runtime->webclients[idx].sd, r1, strlen(r1)) ;
+    write(G_runtime->webclients[idx].sd, r2, strlen(r2)) ;
+    write(G_runtime->webclients[idx].sd, r3, strlen(r3)) ;
+    write(G_runtime->webclients[idx].sd, r4, strlen(r4)) ;
+    f_close_webclient(idx) ;
+  }
+
   // if prometheus is scraping, send metrics and close connection
 
   if ((strcmp(method, "GET") == 0) &&
