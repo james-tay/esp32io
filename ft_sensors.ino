@@ -571,7 +571,7 @@ void f_sensors_cmd(struct td_sensors *td, char *cur_cmd)
     // and update the next "label_base[]" so that it is ready for the next
     // "l:..." entry.
 
-    if (td->cur_function > td->num_functions)
+    if (td->cur_function >= td->num_functions)
     {
       td->num_functions++ ;
       int fn_idx = td->cur_function ;
@@ -615,7 +615,6 @@ void f_init_thread_data (struct td_sensors *td, S_UserThread *self)
       td->t_idx = t_idx ;
       break ;
     }
-  td->num_functions = -1 ;                      // set to invalid/uninitialized
   td->prev_results = -1 ;                       // set to invalid/uninitialized
   td->label_base[0] = td->label_buf ;           // point to start of buffer
   td->next_run = esp_timer_get_time() ;         // set this to now essentially

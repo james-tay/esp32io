@@ -107,13 +107,23 @@ void f_mqtt_connect(int idx)
     return ;
   }
 
+  // each MQTT client must connect to the MQTT server with a unique name,
+  // otherwise the server will kick us out. Generate a unique name using our
+  // wifi mac address.
+
+  char client_name[BUF_LEN_LINE] ;
+  unsigned char mac[6] ;
+  WiFi.macAddress(mac) ;
+  snprintf(client_name, BUF_LEN_LINE, "%s-%x%x%x%x%x%x", PUBSUB_CLIENT_NAME,
+           mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]) ;
+
   // at this point, we have successfully parsed our MQTT configuration. Note
   // that for some reason, we cannot acquire "L_pubsub" at this time, as it
   // results in "connect()" hanging and causing a stacktrace.
 
   G_psClient.setServer(cfg_server, port) ;
   G_runtime->mqtt_connect_ts = esp_timer_get_time() ;
-  if (G_psClient.connect(PUBSUB_CLIENT_NAME, cfg_user, cfg_pw))
+  if (G_psClient.connect(client_name, cfg_user, cfg_pw))
   {
     if (idx >= 0)
     {
