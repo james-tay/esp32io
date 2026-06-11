@@ -236,7 +236,7 @@ void f_version_cmd(int idx)
   esp_chip_info_t chip_info ;
   esp_chip_info(&chip_info) ;
   snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
-           "Model %s (revision %d), %d cores.\r\n"
+           "Model %s (revision %d), %d cores at %d Mhz.\r\n"
            "Git commit %s, built %s.\r\n"
            "G_runtime is %d bytes.\r\n"
            "Free heap bytes:\r\n"
@@ -246,6 +246,7 @@ void f_version_cmd(int idx)
            "  %d setup() complete\r\n"
            "  %d current free\r\n",
            ESP.getChipModel(), chip_info.revision, chip_info.cores,
+           getCpuFrequencyMhz(),
            BUILD_COMMIT, BUILD_TIME,
            sizeof(S_RuntimeData),
            G_runtime->initial_heap_bytes,
@@ -303,6 +304,7 @@ void f_action(int idx)
       "mqtt ...         manage MQTT\r\n"
       "ntp <server>     update local clock\r\n"
       "ota <url>        perform a software update\r\n"
+      "pwm ...          manage PWM\r\n"
       "relay ...        control a relay\r\n"
       "reload           reload/reboot the device\r\n"
       "set ...          set device configuration\r\n"
@@ -358,6 +360,9 @@ void f_action(int idx)
   else
   if (strcmp(keyword, "ota") == 0)                              // ota
     f_ota_cmd(idx) ;
+  else
+  if (strcmp(keyword, "pwm") == 0)                              // pwm
+    f_pwm_cmd(idx) ;
   else
   if (strcmp(keyword, "relay") == 0)                            // relay
     f_relay_cmd(idx) ;

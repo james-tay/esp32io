@@ -243,6 +243,7 @@ struct runtime_data {
   int heap_before_wifi ;                // free heap bytes before Wifi init
   int heap_after_wifi ;                 // free heap bytes after Wifi init
   int heap_setup_complete ;             // free heatp bytes after "setup()"
+  char pwm_init ;                       // 0=uninitialized, 1=obvious
   char cmd_buf[BUF_LEN_LINE] ;          // used in main "loop()"
   long long ts_last_blink ;             // timestamp of last LED blink
   long long ts_last_wifi_check ;        // timestamp of last wifi status check
