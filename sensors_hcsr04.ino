@@ -102,3 +102,55 @@ void f_hcsr04_cmd(int idx)
   G_runtime->worker[idx].result_code = 200 ;
 }
 
+/*
+   This function is called from "f_user_thread_lifecycle()". Our job is to
+   perform multiple polls on an HC-SR04 sensor and expose min/ave/max values.
+   Invalid poll results will be rejected. If we did not receive any valid
+   polls, then the results we expose will be "-1".
+*/
+
+void ft_hcsr04(S_UserThread *self)
+
+{
+  if (self->num_args != 5)      // don't run if we're called with bad arguments
+  {
+    strncpy(self->status, "Incorrect arguments", BUF_LEN_UTHREAD_STATUS) ;
+    self->state = UTHREAD_STOPPED ;
+    return ;
+  }
+
+  int cycle_ms = atoi(self->in_args[0]) ;
+  int num_samples = atoi(self->in_args[1]) ;
+  int trig_pin = atoi(self->in_args[2]) ;
+  int echo_pin = atoi(self->in_args[3]) ;
+  int thres_cm = atoi(self->in_args[4]) ;
+
+  if (num_samples > HCSR04_MAX_SAMPLES)
+    num_samples = HCSR04_MAX_SAMPLES ;
+  if (num_samples < 1)
+    num_samples = 1 ;
+
+  if (self->loop == 0)                          // setup metrics we'll expose
+  {
+    self->result[0].l_name[0] = "type" ;
+    self->result[0].l_data[0] = "Min" ;
+    self->result[1].l_name[0] = "type" ;
+    self->result[1].l_data[0] = "Ave" ;
+    self->result[2].l_name[0] = "type" ;
+    self->result[2].l_data[0] = "Max" ;
+
+    self->state = UTHREAD_RUNNING ;
+  }
+
+  int good_samples=0 ;
+  float all_samples[num_samples] ;
+
+  for (int i=0 ; i < num_samples ; i++)
+  {
+    float cur_sample = f_hcsr04(trig_pin, echo_pin) ;
+
+    delay(HCSR04_POLL_DELAY_MS) ;
+  }
+
+}
+
