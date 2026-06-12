@@ -12,6 +12,12 @@
 
 float f_hcsr04 (int trig_pin, int echo_pin)
 {
+  /*
+     before we do work, acquire the "L_hcsr04" lock. We don't want multiple
+     HC-SR04 units firing at the same time as this may cause interference.
+  */
+
+  xSemaphoreTake(G_runtime->L_hcsr04, portMAX_DELAY) ;
   pinMode(trig_pin, OUTPUT) ;
   pinMode(echo_pin, INPUT) ;
 
@@ -24,6 +30,8 @@ float f_hcsr04 (int trig_pin, int echo_pin)
   digitalWrite (trig_pin, LOW) ;
 
   unsigned long echo_usecs = pulseIn(echo_pin, HIGH, HCSR04_TIMEOUT_USEC) ;
+  xSemaphoreGive(G_runtime->L_hcsr04) ;
+
   if (echo_usecs == 0)
     return(-1.0) ;                              // no response from sensor
   else

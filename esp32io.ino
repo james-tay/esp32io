@@ -414,6 +414,7 @@ void setup()
   memset(G_runtime, 0, sizeof(S_RuntimeData)) ;
   G_runtime->L_worker = xSemaphoreCreateMutex() ;
   G_runtime->L_uthread = xSemaphoreCreateMutex() ;
+  G_runtime->L_hcsr04 = xSemaphoreCreateMutex() ;
   G_runtime->L_i2c = xSemaphoreCreateMutex() ;
   G_runtime->L_uart = xSemaphoreCreateMutex() ;
   G_runtime->L_pubsub = xSemaphoreCreateMutex() ;

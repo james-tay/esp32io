@@ -280,6 +280,7 @@ struct runtime_data {
 
   SemaphoreHandle_t L_worker ;          // "next_worker"
   SemaphoreHandle_t L_serial_in ;       // unlocked when serial data arrives
+  SemaphoreHandle_t L_hcsr04 ;          // prevent ultrasonic interference
   SemaphoreHandle_t L_i2c ;             // lock for "Wire.xxx()" transactions
   SemaphoreHandle_t L_uart ;            // the Serial2 (aka UART2) hardware
   SemaphoreHandle_t L_uthread ;         // lock at thread setup and termination
