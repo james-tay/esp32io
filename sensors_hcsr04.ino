@@ -102,6 +102,27 @@ void f_hcsr04_cmd(int idx)
 }
 
 /*
+   This function is called from "ft_hcsr04()" when the sensor's "value" has
+   crossed the user specified threshold. Our job is to render the message
+   which will be published via MQTT.
+*/
+
+void f_publish_hcsr04(S_UserThread *self, float value)
+{
+  char tmp_buf[BUF_LEN_LINE], label_cfg[BUF_LEN_LINE], metric[BUF_LEN_LINE] ;
+
+  // first try custom metric/labels from a file
+
+  snprintf(tmp_buf, BUF_LEN_LINE, "/%s.labels", self->name) ;
+  if (f_read_single_line(tmp_buf, label_cfg, BUF_LEN_LINE) < 1)
+    label_cfg[0] = 0 ;                  // opsie, no custom metric/labels file
+  f_render_metric(label_cfg, self->name, &self->result[1], tmp_buf,
+                  BUF_LEN_LINE) ;
+  snprintf(metric, BUF_LEN_LINE, "%s %f", tmp_buf, value) ;
+  f_mqtt_publish(-1, metric) ;
+}
+
+/*
    This function is called from "f_user_thread_lifecycle()". Our job is to
    perform multiple polls on an HC-SR04 sensor and expose min/ave/max values.
    Invalid poll results will be rejected. If we did not receive any valid
@@ -111,8 +132,8 @@ void f_hcsr04_cmd(int idx)
 void ft_hcsr04(S_UserThread *self)
 
 {
-  #define STATE_IDX 4           // 0=below thres, 1=above thres
-  #define TIMER_IDX 5           // used to track timestamp of next run
+  #define STATE_IDX 5           // 0=below thres, 1=above thres
+  #define TIMER_IDX 6           // used to track timestamp of next run
 
   if (self->num_args != 5)      // don't run if we're called with bad arguments
   {
@@ -140,9 +161,12 @@ void ft_hcsr04(S_UserThread *self)
     self->result[1].l_data[0] = "Ave" ;
     self->result[2].l_name[0] = "type" ;
     self->result[2].l_data[0] = "Max" ;
-    self->result[3].l_name[0] = "polls" ;
-    self->result[3].l_data[0] = "failed" ;
+    self->result[3].l_name[0] = "poll" ;
+    self->result[3].l_data[0] = "cycles_failed" ;
     self->result[3].result_type = UTHREAD_RESULT_INT ;
+    self->result[4].l_name[0] = "poll" ;
+    self->result[4].l_data[0] = "cur_samples" ;
+    self->result[4].result_type = UTHREAD_RESULT_INT ;
 
     // internal use only
 
@@ -177,6 +201,7 @@ void ft_hcsr04(S_UserThread *self)
     }
     delay(HCSR04_POLL_DELAY_MS) ;
   }
+  self->result[4].i_value = sample_idx ;        // number of good samples
 
   // if we had at least 1 good sample, expose the results
 
@@ -211,16 +236,16 @@ void ft_hcsr04(S_UserThread *self)
     else
     {
       if ((self->result[STATE_IDX].i_value == 0) &&
-          (self->result[1].f_value > thres_cm))
+          (self->result[1].f_value > thres_cm))                 // 0 -> 1
       {
-
-
+        self->result[STATE_IDX].i_value = 1 ;
+        f_publish_hcsr04(self, self->result[1].f_value) ;
       }
       if ((self->result[STATE_IDX].i_value == 1) &&
-          (self->result[1].f_value < thres_cm))
+          (self->result[1].f_value < thres_cm))                 // 1 -> 0
       {
-
-
+        self->result[STATE_IDX].i_value = 0 ;
+        f_publish_hcsr04(self, self->result[1].f_value) ;
       }
     }
   }
