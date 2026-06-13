@@ -1,4 +1,3 @@
-
 #define HCSR04_TIMEOUT_USEC 60000       // max time to wait for a response
 #define HCSR04_POLL_DELAY_MS 20         // time interval between polls
 #define HCSR04_MAX_SAMPLES 10           // max number of samples per poll
@@ -139,18 +138,68 @@ void ft_hcsr04(S_UserThread *self)
     self->result[2].l_name[0] = "type" ;
     self->result[2].l_data[0] = "Max" ;
 
+    self->result[3].ll_value = esp_timer_get_time() ; // internal use only
     self->state = UTHREAD_RUNNING ;
   }
 
-  int good_samples=0 ;
-  float all_samples[num_samples] ;
+  int sample_idx=0 ;
+  float all_samples[num_samples], min_val=-1.0, max_val=-1.0, total=0.0 ;
 
   for (int i=0 ; i < num_samples ; i++)
   {
     float cur_sample = f_hcsr04(trig_pin, echo_pin) ;
-
+    if (cur_sample > 0)
+    {
+      all_samples[sample_idx] = cur_sample ;
+      if (sample_idx == 0)                      // first sample, set min/max.
+      {
+        min_val = cur_sample ;
+        max_val = cur_sample ;
+      }
+      else                                      // check min/max values
+      {
+        if (cur_sample < min_val)
+          min_val = cur_sample ;
+        if (cur_sample > max_val)
+          max_val = cur_sample ;
+      }
+      total = total + cur_sample ;
+      sample_idx++ ;
+    }
     delay(HCSR04_POLL_DELAY_MS) ;
   }
 
+  // if the user specified "thres_cm", check if we've crossed that threshold
+
+
+
+
+
+  // if we had at least 1 good sample, expose the results
+
+  if (sample_idx > 0)
+  {
+    self->result[0].f_value = min_val ;
+    self->result[0].result_type = UTHREAD_RESULT_FLOAT ;
+    self->result[1].f_value = total / (float) sample_idx ;
+    self->result[1].result_type = UTHREAD_RESULT_FLOAT ;
+    self->result[2].f_value = max_val ;
+    self->result[2].result_type = UTHREAD_RESULT_FLOAT ;
+  }
+  else
+  {
+    self->result[0].result_type = UTHREAD_RESULT_NONE ;
+    self->result[1].result_type = UTHREAD_RESULT_NONE ;
+    self->result[2].result_type = UTHREAD_RESULT_NONE ;
+  }
+
+  // figure out next run time, how long to sleep for, and thread status
+
+  self->result[3].ll_value = self->result[3].ll_value + (cycle_ms * 1000) ;
+  long long nap_ms = (self->result[3].ll_value - esp_timer_get_time()) / 1000 ;
+  snprintf(self->status, BUF_LEN_UTHREAD_STATUS, "samples:%d nap_ms:%lld",
+           sample_idx, nap_ms) ;
+  if (nap_ms > 0)
+    delay(nap_ms) ;
 }
 
