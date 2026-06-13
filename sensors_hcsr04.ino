@@ -111,6 +111,9 @@ void f_hcsr04_cmd(int idx)
 void ft_hcsr04(S_UserThread *self)
 
 {
+  #define STATE_IDX 4           // 0=below thres, 1=above thres
+  #define TIMER_IDX 5           // used to track timestamp of next run
+
   if (self->num_args != 5)      // don't run if we're called with bad arguments
   {
     strncpy(self->status, "Incorrect arguments", BUF_LEN_UTHREAD_STATUS) ;
@@ -137,8 +140,14 @@ void ft_hcsr04(S_UserThread *self)
     self->result[1].l_data[0] = "Ave" ;
     self->result[2].l_name[0] = "type" ;
     self->result[2].l_data[0] = "Max" ;
+    self->result[3].l_name[0] = "polls" ;
+    self->result[3].l_data[0] = "failed" ;
+    self->result[3].result_type = UTHREAD_RESULT_INT ;
 
-    self->result[3].ll_value = esp_timer_get_time() ; // internal use only
+    // internal use only
+
+    self->result[STATE_IDX].i_value = -1 ; // set to uninitialized
+    self->result[TIMER_IDX].ll_value = esp_timer_get_time() ;
     self->state = UTHREAD_RUNNING ;
   }
 
@@ -169,36 +178,62 @@ void ft_hcsr04(S_UserThread *self)
     delay(HCSR04_POLL_DELAY_MS) ;
   }
 
-  // if the user specified "thres_cm", check if we've crossed that threshold
-
-
-
-
-
   // if we had at least 1 good sample, expose the results
 
-  if (sample_idx > 0)
+  if (sample_idx > 0)                                   // got some data
   {
-    self->result[0].f_value = min_val ;
+    self->result[0].f_value = min_val ;                         // min
     self->result[0].result_type = UTHREAD_RESULT_FLOAT ;
-    self->result[1].f_value = total / (float) sample_idx ;
+    self->result[1].f_value = total / (float) sample_idx ;      // ave
     self->result[1].result_type = UTHREAD_RESULT_FLOAT ;
-    self->result[2].f_value = max_val ;
+    self->result[2].f_value = max_val ;                         // max
     self->result[2].result_type = UTHREAD_RESULT_FLOAT ;
   }
-  else
+  else                                                  // no valid data
   {
     self->result[0].result_type = UTHREAD_RESULT_NONE ;
     self->result[1].result_type = UTHREAD_RESULT_NONE ;
     self->result[2].result_type = UTHREAD_RESULT_NONE ;
+    self->result[3].i_value++ ;
+  }
+
+  // if user specified "thres_cm" and we got a good reading, track state
+
+  if ((sample_idx > 0) && (thres_cm > 0))
+  {
+    if (self->result[STATE_IDX].i_value < 0)    // not initialized
+    {
+      if (self->result[1].f_value < thres_cm)
+        self->result[STATE_IDX].i_value = 0 ;
+      else
+        self->result[STATE_IDX].i_value = 1 ;
+    }
+    else
+    {
+      if ((self->result[STATE_IDX].i_value == 0) &&
+          (self->result[1].f_value > thres_cm))
+      {
+
+
+      }
+      if ((self->result[STATE_IDX].i_value == 1) &&
+          (self->result[1].f_value < thres_cm))
+      {
+
+
+      }
+    }
   }
 
   // figure out next run time, how long to sleep for, and thread status
 
-  self->result[3].ll_value = self->result[3].ll_value + (cycle_ms * 1000) ;
-  long long nap_ms = (self->result[3].ll_value - esp_timer_get_time()) / 1000 ;
-  snprintf(self->status, BUF_LEN_UTHREAD_STATUS, "samples:%d nap_ms:%lld",
-           sample_idx, nap_ms) ;
+  self->result[TIMER_IDX].ll_value = self->result[TIMER_IDX].ll_value +
+                                     (cycle_ms * 1000) ;
+  long long nap_ms = (self->result[TIMER_IDX].ll_value - esp_timer_get_time())
+                      / 1000 ;
+  snprintf(self->status, BUF_LEN_UTHREAD_STATUS,
+           "state:%d samples:%d nap_ms:%lld",
+           self->result[STATE_IDX].i_value, sample_idx, nap_ms) ;
   if (nap_ms > 0)
     delay(nap_ms) ;
 }
