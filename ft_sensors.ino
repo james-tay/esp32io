@@ -85,6 +85,16 @@
    Recall that the metric name is still determined by thread name, or it may
    be defined by "/<thread_name>.labels" (optional file).
 
+  INTERNALS
+
+   As a standard user task thread, the call chain is as follows,
+
+    - ft_sensors()              # entrypoint, reads commands file
+     - f_sensors_cmd()          # supplied a single line, parses it
+      - <internal commands>     # eg, "delay_ms"
+      - f_sfunction_XXX()       # eg, "f_sfunction_dht22()"
+       - f_sensor_XXX()         # eg, "f_sensor_dht22()"
+
   SENSOR FAILURES
 
    Some sensor functions may return multiple results (eg, multiple DS18B20
@@ -119,6 +129,7 @@ struct td_sensors {
   int total_results ;                           // current total sensor results
   int prev_results ;                            // results from previous run
   int t_idx ;                                   // our user task thread index
+  int retries ;                                 // retry sensor reads
   long long next_run ;                          // usecs timestamp of next run
   long long ts_init ;                           // this struct's init time
   char *label_base[DEF_MAX_THREAD_RESULTS] ;    // pointers into "label_buf"
@@ -431,6 +442,16 @@ void f_sfunction_ds18b20(struct td_sensors *td)
   memset(addrs, 0, DEF_DS18B20_MAX_PER_BUS * 8) ;
   int total_devs = f_sensor_ds18b20(data_pin, temperatures, addrs) ;
 
+  // if "td->retries" is set, then privately repeat the above poll on
+  // "data_pin" and compare results
+
+  if (td->retries)
+  {
+
+
+
+  }
+
   // if this our first time writing into "result[]", we'll need to store
   // the hex string addresses of DS18B20 units in heap memory. Since the
   // current "label_base[]" entry points at "free" space, we'll use this
@@ -606,7 +627,8 @@ void f_sensors_cmd(struct td_sensors *td, char *cur_cmd)
    S_td_sensors structure at the supplied "td" address.
 */
 
-void f_init_thread_data (struct td_sensors *td, S_UserThread *self)
+void f_init_thread_data (struct td_sensors *td, S_UserThread *self,
+                         int retries)
 {
   memset(td, 0, sizeof(S_td_sensors)) ;
   for (int t_idx=0 ; t_idx < DEF_MAX_USER_THREADS ; t_idx++)
@@ -616,6 +638,7 @@ void f_init_thread_data (struct td_sensors *td, S_UserThread *self)
       break ;
     }
   td->prev_results = -1 ;                       // set to invalid/uninitialized
+  td->retries = retries ;                       // retry sensor reads
   td->label_base[0] = td->label_buf ;           // point to start of buffer
   td->next_run = esp_timer_get_time() ;         // set this to now essentially
   td->ts_init = td->next_run ;                  // used to track (re)init
@@ -643,7 +666,7 @@ void ft_sensors(S_UserThread *self)
 
   // parse our thread arguments.
 
-  if (self->num_args != 2)
+  if ((self->num_args != 2) && (self->num_args != 3))
   {
     strncpy(self->status, "Incorrect arguments", BUF_LEN_UTHREAD_STATUS) ;
     self->state = UTHREAD_STOPPED ;
@@ -656,6 +679,10 @@ void ft_sensors(S_UserThread *self)
 
   if (self->loop == 0)
   {
+    int retries = 0 ;
+    if (self->num_args == 3)
+      retries = atoi(self->in_args[2]) ;
+
     self->malloc_buf = malloc(sizeof(S_td_sensors)) ;
     if (self->malloc_buf == NULL)
     {
@@ -664,7 +691,7 @@ void ft_sensors(S_UserThread *self)
       return ;
     }
     td = (S_td_sensors*) self->malloc_buf ;
-    f_init_thread_data(td, self) ;
+    f_init_thread_data(td, self, retries) ;
     self->state = UTHREAD_RUNNING ;     // results are exposed once this is set
   }
   td = (S_td_sensors*) self->malloc_buf ;
@@ -722,7 +749,10 @@ void ft_sensors(S_UserThread *self)
       Serial.printf("DEBUG: ft_sensors() cur_result:%d total_results:%d\r\n",
                     td->cur_result, td->total_results) ;
 
-    f_init_thread_data(td, self) ;
+    int retries = 0 ;
+    if (self->num_args == 3)
+      retries = atoi(self->in_args[2]) ;
+    f_init_thread_data(td, self, retries) ;
   }
   else
   {
