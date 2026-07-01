@@ -450,11 +450,11 @@ void f_sfunction_ds18b20(struct td_sensors *td)
   if (td->retries)
   {
     int all_good=0 ;
-    for (int attempts=0 ; attempts < DS18B20_MAX_RETRIES ; attempts++)
-    {
-      int devs_one=0, devs_two=0 ;
-      float t_one[DS18B20_MAX_PER_BUS], t_two[DS18B20_MAX_PER_BUS] ;
+    int devs_one=0, devs_two=0 ;
+    float t_one[DS18B20_MAX_PER_BUS], t_two[DS18B20_MAX_PER_BUS] ;
 
+    for (int attempt=0 ; attempt < DS18B20_MAX_RETRIES ; attempt++)
+    {
       memset(addrs, 0, DS18B20_MAX_PER_BUS * 8) ;
       devs_one = f_sensor_ds18b20(data_pin, t_one, addrs) ;
       devs_two = f_sensor_ds18b20(data_pin, t_two, addrs) ;
@@ -476,16 +476,21 @@ void f_sfunction_ds18b20(struct td_sensors *td)
               Serial.printf("DEBUG: f_sfunction_ds18b20() large delta\r\n") ;
           }
       }
+
+      // if data is good, copy to "total_devs", "temperatures" and "addrs"
+
       if (all_good)
+      {
+        if (G_runtime->config.debug)
+          Serial.printf("DEBUG: f_sfunction_ds18b20() devs:%d attempt:%d\r\n",
+                        devs_one, attempt) ;
+
+        total_devs = devs_one ;
+        for (int i=0 ; i < devs_one ; i++)
+          temperatures[i] = t_one[i] ;
         break ;
+      }
     }
-
-    // if sensor data is good, copy to "total_devs", "temperatures" and "addrs"
-
-
-
-
-
   }
   else                          // don't do retries, just do a single poll
   {
