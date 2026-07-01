@@ -133,7 +133,7 @@ struct td_sensors {
   int total_results ;                           // current total sensor results
   int prev_results ;                            // results from previous run
   int t_idx ;                                   // our user task thread index
-  int retries ;                                 // retry sensor reads
+  int retries ;                                 // a flag to retry sensor reads
   long long next_run ;                          // usecs timestamp of next run
   long long ts_init ;                           // this struct's init time
   char *label_base[DEF_MAX_THREAD_RESULTS] ;    // pointers into "label_buf"
@@ -410,9 +410,50 @@ void f_sfunction_dht22(struct td_sensors *td)
     td->cur_result-- ;          // move next result insertion point back
   }
 
+  int all_good=0 ;
   char err[BUF_LEN_ERR] ;
   float temperature=0.0, humidity=0.0 ;
-  if (f_sensor_dht22(data_pin, &temperature, &humidity, err))
+
+  // if "td->retries" is set, then privately poll the sensor twice and compare
+  // results before proceeding.
+
+  if (td->retries)
+  {
+    float t1, t2, h1, h2 ;
+
+    for (int attempt=0 ; attempt < DHT22_MAX_RETRIES ; attempt++)
+    {
+      all_good = f_sensor_dht22(data_pin, &t1, &h1, err) ;
+      delay(DHT22_POLL_DELAY_MS) ;
+      if (all_good)                             // proceed with 2nd reading
+      {
+        all_good = f_sensor_dht22(data_pin, &t2, &h2, err) ;
+        if (all_good)
+        {
+          if ((fabsf(t1 - t2) < DHT22_MAX_T_DELTA) &&
+              (fabsf(h1 - h2) < DHT22_MAX_H_DELTA))     // ok, really good !
+          {
+            if (G_runtime->config.debug)
+              Serial.printf("DEBUG: f_sfunction_dht22() attempt:%d\r\n",
+                            attempt) ;
+            temperature = t1 ;
+            humidity = h1 ;
+            break ;
+          }
+          else
+            if (G_runtime->config.debug)
+              Serial.printf("DEBUG: f_sfunction_dht22() large delta\r\n") ;
+        }
+      }
+      delay(DHT22_POLL_DELAY_MS) ;
+    }
+  }
+  else
+    all_good = f_sensor_dht22(data_pin, &temperature, &humidity, err) ;
+
+  // if we were successful, update/expose new temperature / humidity readings
+
+  if (all_good)
   {
     res[td->cur_result].f_value = temperature ;
     res[td->cur_result].result_type = UTHREAD_RESULT_FLOAT ;
@@ -457,6 +498,7 @@ void f_sfunction_ds18b20(struct td_sensors *td)
     {
       memset(addrs, 0, DS18B20_MAX_PER_BUS * 8) ;
       devs_one = f_sensor_ds18b20(data_pin, t_one, addrs) ;
+      delay(DS18B20_POLL_DELAY) ;
       devs_two = f_sensor_ds18b20(data_pin, t_two, addrs) ;
 
       if (devs_one != devs_two)
@@ -490,6 +532,8 @@ void f_sfunction_ds18b20(struct td_sensors *td)
           temperatures[i] = t_one[i] ;
         break ;
       }
+      else
+        delay(DS18B20_POLL_DELAY) ;
     }
   }
   else                          // don't do retries, just do a single poll

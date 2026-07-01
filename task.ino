@@ -120,7 +120,7 @@ void f_task_help(int idx)
           "ft_ds18b20:<c>,<dataPin>,<pwrPin>,<intervalSecs>\r\n"
           "ft_hcsr04:<c>,<pollMs>,<samples>,<trigPin>,<echoPin>,<thres_cm>\r\n"
           "ft_relay:<c>,<pin>,<timeOutSecs>\r\n"
-          "ft_sensors:<c>,<intervalSecs>,<filename>[,retries]\r\n"
+          "ft_sensors:<c>,<intervalSecs>,<filename>[,0|1=retry]\r\n"
           "ft_serial:<c>,<tcpPort>,<baud>,<rxPin>,<txPin>,<pollMs>\r\n"
           "ft_utasks:<c>,<filename>\r\n"
           "ft_wd:<c>,<startupSecs>,<intervalSecs>,<noActivitySecs>\r\n",
