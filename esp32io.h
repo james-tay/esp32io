@@ -45,7 +45,6 @@
 #define DEF_I2C_IO_BYTES 128            // max bytes in a single read/write
 #define DEF_I2C_MAX_CLOCK_KHZ 800       // maximum I2C clock speed in khz
 #define DEF_I2C_MIN_CLOCK_KHZ 10        // minimum I2C clock speed in khz
-#define DEF_DS18B20_MAX_PER_BUS 8       // maximum sensors per GPIO pin
 
 // stack sizes for various threads
 
@@ -109,6 +108,23 @@
 #define UTHREAD_RUNNING 2               // user thread's code is running
 #define UTHREAD_WRAPUP 3                // cleanup and prepare to terminate
 #define UTHREAD_STOPPED 4               // user thread's code is not running
+
+// Various sensor limits and such
+
+#define DS18B20_MAX_PER_BUS 8           // maximum sensors per GPIO pin
+#define DS18B20_POLL_DELAY 800          // based on datasheet page 1
+#define DS18B20_POWER_ON_DELAY_MS 20    // wait for voltage to stabilize
+#define DS18B20_TEMP_MAX 125.0          // maximum valid temperature reading
+#define DS18B20_TEMP_MIN -55.0          // minimum valid temperature reading
+#define DS18B20_MAX_DELTA 5.0           // max temperature swing between polls
+#define DS18B20_MAX_RETRIES 3           // repeat if temperature swing is large
+
+#define DHT22_TIMEOUT_USEC 500          // expected pulseIn response time
+#define DHT22_MAX_T_DELTA 5.0           // max temperature swing between polls
+#define DHT22_MAX_H_DELTA 20            // max humidity swing between polls
+#define DHT22_MAX_RETRIES 10            // max total polls
+#define DHT22_POWER_ON_DELAY_MS 1200    // based on datasheet section 6
+#define DHT22_POLL_DELAY_MS 2200        // based on datasheet section 7
 
 // This structure tracks a single (connected) HTTP client
 

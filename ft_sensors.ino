@@ -107,6 +107,10 @@
    of results, which is detected by comparing against "prev_results". This too
    triggers a reinitialization of "S_td_sensors" and the thread's "result[]"
    array.
+
+   Each time such a reinitialization is performed by "f_init_thread_data()",
+   we increment this as a counter in the last DEF_MAX_THREAD_RESULTS entry in
+   our "result[]" array.
 */
 
 /*
@@ -433,23 +437,60 @@ void f_sfunction_ds18b20(struct td_sensors *td)
   if (td->cur_d == NULL)                        // fatal ! pin not specified
     return ;
 
-  int label_idx=0 ;
+  int label_idx=0, total_devs=0 ;
   int data_pin = atoi(td->cur_d) ;
-  float temperatures[DEF_DS18B20_MAX_PER_BUS] ;
-  unsigned char addrs[DEF_DS18B20_MAX_PER_BUS * 8] ;  // 8 bytes per sensor
-  S_ThreadResult *res = G_runtime->utask[td->t_idx].result ;
-
-  memset(addrs, 0, DEF_DS18B20_MAX_PER_BUS * 8) ;
-  int total_devs = f_sensor_ds18b20(data_pin, temperatures, addrs) ;
+  float temperatures[DS18B20_MAX_PER_BUS] ;
+  unsigned char addrs[DS18B20_MAX_PER_BUS * 8] ;  // 8 bytes per sensor
 
   // if "td->retries" is set, then privately repeat the above poll on
-  // "data_pin" and compare results
+  // "data_pin" and compare results before blindly accepting them. We want
+  // to have 2x sets of readings which have matching number of devices and
+  // are within DS18B20_MAX_DELTA of each other.
 
   if (td->retries)
   {
+    int all_good=0 ;
+    for (int attempts=0 ; attempts < DS18B20_MAX_RETRIES ; attempts++)
+    {
+      int devs_one=0, devs_two=0 ;
+      float t_one[DS18B20_MAX_PER_BUS], t_two[DS18B20_MAX_PER_BUS] ;
+
+      memset(addrs, 0, DS18B20_MAX_PER_BUS * 8) ;
+      devs_one = f_sensor_ds18b20(data_pin, t_one, addrs) ;
+      devs_two = f_sensor_ds18b20(data_pin, t_two, addrs) ;
+
+      if (devs_one != devs_two)
+      {
+        all_good = 0 ;
+        if (G_runtime->config.debug)
+          Serial.printf("DEBUG: f_sfunction_ds18b20() devs mismatch\r\n") ;
+      }
+      else
+      {
+        all_good = 1 ;
+        for (int i=0 ; i < devs_one ; i++)
+          if (fabsf(t_one[i] - t_two[i]) > DS18B20_MAX_DELTA)
+          {
+            all_good = 0 ;
+            if (G_runtime->config.debug)
+              Serial.printf("DEBUG: f_sfunction_ds18b20() large delta\r\n") ;
+          }
+      }
+      if (all_good)
+        break ;
+    }
+
+    // if sensor data is good, copy to "total_devs", "temperatures" and "addrs"
 
 
 
+
+
+  }
+  else                          // don't do retries, just do a single poll
+  {
+    memset(addrs, 0, DS18B20_MAX_PER_BUS * 8) ;
+    total_devs = f_sensor_ds18b20(data_pin, temperatures, addrs) ;
   }
 
   // if this our first time writing into "result[]", we'll need to store
@@ -458,6 +499,7 @@ void f_sfunction_ds18b20(struct td_sensors *td)
   // area for storing the hex strings and move the current "label_base[]"
   // forward. Note each hex address string needs 18 bytes (including NULL).
 
+  S_ThreadResult *res = G_runtime->utask[td->t_idx].result ;
   if (td->cur_result + total_devs >= td->total_results)
   {
     int total_buf_size = 18 * total_devs ;
@@ -643,10 +685,17 @@ void f_init_thread_data (struct td_sensors *td, S_UserThread *self,
   td->next_run = esp_timer_get_time() ;         // set this to now essentially
   td->ts_init = td->next_run ;                  // used to track (re)init
 
-  // now wipe any previous "result[]" data
+  // now wipe any previous "result[]" data, but save the last result, which
+  // tracks the number of times this function re-inits.
 
+  int count = self->result[DEF_MAX_THREAD_RESULTS-1].i_value ;
   memset(G_runtime->utask[td->t_idx].result, 0,
          DEF_MAX_THREAD_RESULTS * sizeof(S_ThreadResult)) ;
+
+  self->result[DEF_MAX_THREAD_RESULTS-1].l_name[0] = "init" ;
+  self->result[DEF_MAX_THREAD_RESULTS-1].l_data[0] = "counter" ;
+  self->result[DEF_MAX_THREAD_RESULTS-1].result_type = UTHREAD_RESULT_INT ;
+  self->result[DEF_MAX_THREAD_RESULTS-1].i_value = count + 1 ;
 
   if (G_runtime->config.debug)
     Serial.printf("DEBUG: f_init_thread_data() initialized with t_idx:%d\r\n",
