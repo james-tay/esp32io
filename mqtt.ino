@@ -185,6 +185,9 @@ void f_mqtt_disconnect (int idx)
 
 void f_mqtt_publish(int idx, char *msg)
 {
+  if (G_runtime->pubsub_state == 0) // don't even try if MQTT is unconfigured
+    return ;
+
   if (xSemaphoreTake(G_runtime->L_pubsub,
                      pdMS_TO_TICKS(DEF_MQTT_LOCK_WAIT_MSEC)) != pdTRUE)
   {

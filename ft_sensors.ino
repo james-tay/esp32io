@@ -111,6 +111,15 @@
    Each time such a reinitialization is performed by "f_init_thread_data()",
    we increment this as a counter in the last DEF_MAX_THREAD_RESULTS entry in
    our "result[]" array.
+
+   To better understand sensor failures, the "retries" flag (default 0) can be
+   set to "1". Functions may check the "retries" flag and perform more detailed
+   polling and checking. When "retries" is turned on, functions may send fault
+   messages via MQTT so that we can better understand what's going wrong.
+   These messages will be published to the default configured topic in the
+   format,
+
+     <thread_name>{event="fault",<other_labels,...>} 1
 */
 
 /*
@@ -136,6 +145,7 @@ struct td_sensors {
   int retries ;                                 // a flag to retry sensor reads
   long long next_run ;                          // usecs timestamp of next run
   long long ts_init ;                           // this struct's init time
+  char *thread_name ;                           // this thread's name
   char *label_base[DEF_MAX_THREAD_RESULTS] ;    // pointers into "label_buf"
   char label_buf[BUF_LEN_UTASK_FILESIZE] ;      // all labels here
 } ;
@@ -441,10 +451,26 @@ void f_sfunction_dht22(struct td_sensors *td)
             break ;
           }
           else
+          {
             if (G_runtime->config.debug)
               Serial.printf("DEBUG: f_sfunction_dht22() large delta\r\n") ;
+            snprintf(err, BUF_LEN_ERR,
+                     "%s{event=\"fault\",f=\"f_sfunction_dht22\","
+                     "reason=\"large_delta\",pin=\"%d\",attempt=\"%d\"} 1",
+                     td->thread_name, data_pin, attempt) ;
+            f_mqtt_publish(-1, err) ;
+          }
         }
       }
+      else
+      {
+        snprintf(err, BUF_LEN_ERR,
+                 "%s{event=\"fault\",f=\"f_sfunction_dht22\","
+                 "reason=\"no_response\",pin=\"%d\",attempt=\"%d\"} 1",
+                 td->thread_name, data_pin, attempt) ;
+        f_mqtt_publish(-1, err) ;
+      }
+
       delay(DHT22_POLL_DELAY_MS) ;
     }
   }
@@ -733,6 +759,7 @@ void f_init_thread_data (struct td_sensors *td, S_UserThread *self,
   td->label_base[0] = td->label_buf ;           // point to start of buffer
   td->next_run = esp_timer_get_time() ;         // set this to now essentially
   td->ts_init = td->next_run ;                  // used to track (re)init
+  td->thread_name = self->name ;                // this thread's name
 
   // now wipe any previous "result[]" data, but save the last result, which
   // tracks the number of times this function re-inits.
