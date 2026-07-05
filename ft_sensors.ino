@@ -696,6 +696,7 @@ void f_sfunction_ds18b20(struct td_sensors *td)
       res[td->cur_result].l_name[label_idx] = "address" ;
       res[td->cur_result].l_data[label_idx] = addr_hex ;
 
+      addr_hex = addr_hex + 18 ;
       td->cur_result++ ;
       td->total_results++ ; // this indicates the result has been initialized
       snprintf(err, BUF_LEN_LINE,
@@ -704,7 +705,6 @@ void f_sfunction_ds18b20(struct td_sensors *td)
              td->thread_name,
              data_pin, dev_idx, td->cur_result, td->total_results) ;
       f_mqtt_publish(-1, err) ;
-      addr_hex = addr_hex + 18 ;
     }
 
     // we're done initializing result labels. Move "cur_result" backwards
