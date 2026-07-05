@@ -230,6 +230,12 @@ void f_sfunction_aread(struct td_sensors *td)
   {
     f_sensor_init_labels(td) ;
     td->total_results++ ; // this indicates the result has been initialized
+    char err[BUF_LEN_LINE] ;
+    snprintf(err, BUF_LEN_LINE,
+             "%s{event=\"notice\",f=\"f_sfunction_aread\","
+             "reason=\"add_result\",pin=\"%d\"} 1",
+             td->thread_name, in_pin) ;
+    f_mqtt_publish(-1, err) ;
   }
 
   res[td->cur_result].i_value = analogRead(in_pin) ;
@@ -260,6 +266,12 @@ void f_sfunction_bme280(struct td_sensors *td)
     res[td->cur_result].l_data[label_idx] = "temperature" ;
     td->total_results++ ;
     td->cur_result++ ;          // move forward to configure next result
+    char err[BUF_LEN_LINE] ;
+    snprintf(err, BUF_LEN_LINE,
+             "%s{event=\"notice\",f=\"f_sfunction_bme280\","
+             "reason=\"add_result\",measurement=\"temperature\"} 1",
+             td->thread_name) ;
+    f_mqtt_publish(-1, err) ;
 
     // copy the "l_name" and "l_data" from the first result into the next
 
@@ -269,12 +281,22 @@ void f_sfunction_bme280(struct td_sensors *td)
     res[td->cur_result].l_data[label_idx] = "humidity" ;
     td->total_results++ ;
     td->cur_result++ ;
+    snprintf(err, BUF_LEN_LINE,
+             "%s{event=\"notice\",f=\"f_sfunction_bme280\","
+             "reason=\"add_result\",measurement=\"humidity\"} 1",
+             td->thread_name) ;
+    f_mqtt_publish(-1, err) ;
 
     label_idx = f_sensor_copy_labels_until(td, td->cur_result - 1,
                                            "measurement") ;
     res[td->cur_result].l_name[label_idx] = "measurement" ;
     res[td->cur_result].l_data[label_idx] = "pressure" ;
     td->total_results++ ;
+    snprintf(err, BUF_LEN_LINE,
+             "%s{event=\"notice\",f=\"f_sfunction_bme280\","
+             "reason=\"add_result\",measurement=\"pressure\"} 1",
+             td->thread_name) ;
+    f_mqtt_publish(-1, err) ;
     td->cur_result = td->cur_result - 2 ; // move result insertion point back
   }
 
@@ -316,6 +338,12 @@ void f_sfunction_bmp180(struct td_sensors *td)
     res[td->cur_result].l_data[label_idx] = "temperature" ;
     td->total_results++ ;
     td->cur_result++ ;          // move forward to configure next result
+    char err[BUF_LEN_LINE] ;
+    snprintf(err, BUF_LEN_LINE,
+             "%s{event=\"notice\",f=\"f_sfunction_bmp180\","
+             "reason=\"add_result\",measurement=\"temperature\"} 1",
+             td->thread_name) ;
+    f_mqtt_publish(-1, err) ;
 
     // copy the "l_name" and "l_data" from the first result into the next
 
@@ -325,6 +353,11 @@ void f_sfunction_bmp180(struct td_sensors *td)
     res[td->cur_result].l_data[label_idx] = "pressure" ;
 
     td->total_results++ ;
+    snprintf(err, BUF_LEN_LINE,
+             "%s{event=\"notice\",f=\"f_sfunction_bmp180\","
+             "reason=\"add_result\",measurement=\"pressure\"} 1",
+             td->thread_name) ;
+    f_mqtt_publish(-1, err) ;
     td->cur_result-- ;          // move next result insertion point back
   }
 
@@ -372,6 +405,12 @@ void f_sfunction_hcsr04(struct td_sensors *td)
   {
     f_sensor_init_labels(td) ;
     td->total_results++ ;
+    char err[BUF_LEN_LINE] ;
+    snprintf(err, BUF_LEN_LINE,
+             "%s{event=\"notice\",f=\"f_sfunction_hcsr04\","
+             "reason=\"add_result\",t_pin=\"%d\",e_pin=\"%d\"} 1",
+             td->thread_name, trig_pin, echo_pin) ;
+    f_mqtt_publish(-1, err) ;
   }
 
   if (distance_cm > 0.0)
@@ -408,6 +447,14 @@ void f_sfunction_dht22(struct td_sensors *td)
     res[td->cur_result].l_data[label_idx] = "temperature" ;
     td->total_results++ ;
     td->cur_result++ ;          // move forward to configure next result
+    char err[BUF_LEN_LINE] ;
+    snprintf(err, BUF_LEN_LINE,
+             "%s{event=\"notice\",f=\"f_sfunction_dht22\","
+             "reason=\"add_result\",pin=\"%d\",measurement=\"temperature\","
+             "result=\"%d/%d\"} 1",
+             td->thread_name, data_pin,
+             td->cur_result, td->total_results) ;
+    f_mqtt_publish(-1, err) ;
 
     // copy the "l_name" and "l_data" from the first result into the next
 
@@ -417,11 +464,18 @@ void f_sfunction_dht22(struct td_sensors *td)
     res[td->cur_result].l_data[label_idx] = "humidity" ;
 
     td->total_results++ ;
+    snprintf(err, BUF_LEN_LINE,
+             "%s{event=\"notice\",f=\"f_sfunction_dht22\","
+             "reason=\"add_result\",pin=\"%d\",measurement=\"humidity\","
+             "result=\"%d/%d\"}} 1",
+             td->thread_name, data_pin,
+             td->cur_result, td->total_results) ;
+    f_mqtt_publish(-1, err) ;
     td->cur_result-- ;          // move next result insertion point back
   }
 
   int all_good=0 ;
-  char err[BUF_LEN_ERR] ;
+  char err[BUF_LEN_LINE] ;
   float temperature=0.0, humidity=0.0 ;
 
   // if "td->retries" is set, then privately poll the sensor twice and compare
@@ -436,7 +490,7 @@ void f_sfunction_dht22(struct td_sensors *td)
       all_good = f_sensor_dht22(data_pin, &t1, &h1, err) ;
       if (all_good == 0)
       {
-        snprintf(err, BUF_LEN_ERR,
+        snprintf(err, BUF_LEN_LINE,
                  "%s{event=\"fault\",f=\"f_sfunction_dht22\","
                  "reason=\"empty_poll1\",pin=\"%d\",attempt=\"%d\"} 1",
                  td->thread_name, data_pin, attempt) ;
@@ -463,7 +517,7 @@ void f_sfunction_dht22(struct td_sensors *td)
           {
             if (G_runtime->config.debug)
               Serial.printf("DEBUG: f_sfunction_dht22() large delta\r\n") ;
-            snprintf(err, BUF_LEN_ERR,
+            snprintf(err, BUF_LEN_LINE,
                      "%s{event=\"fault\",f=\"f_sfunction_dht22\","
                      "reason=\"large_delta\",pin=\"%d\",attempt=\"%d\"} 1",
                      td->thread_name, data_pin, attempt) ;
@@ -472,7 +526,7 @@ void f_sfunction_dht22(struct td_sensors *td)
         }
         else
         {
-          snprintf(err, BUF_LEN_ERR,
+          snprintf(err, BUF_LEN_LINE,
                    "%s{event=\"fault\",f=\"f_sfunction_dht22\","
                    "reason=\"empty_poll2\",pin=\"%d\",attempt=\"%d\"} 1",
                    td->thread_name, data_pin, attempt) ;
@@ -481,7 +535,7 @@ void f_sfunction_dht22(struct td_sensors *td)
       }
       else
       {
-        snprintf(err, BUF_LEN_ERR,
+        snprintf(err, BUF_LEN_LINE,
                  "%s{event=\"fault\",f=\"f_sfunction_dht22\","
                  "reason=\"no_response\",pin=\"%d\",attempt=\"%d\"} 1",
                  td->thread_name, data_pin, attempt) ;
@@ -523,7 +577,7 @@ void f_sfunction_ds18b20(struct td_sensors *td)
 
   int label_idx=0, total_devs=0 ;
   int data_pin = atoi(td->cur_d) ;
-  char err[BUF_LEN_ERR] ;
+  char err[BUF_LEN_LINE] ;
   float temperatures[DS18B20_MAX_PER_BUS] ;
   unsigned char addrs[DS18B20_MAX_PER_BUS * 8] ;  // 8 bytes per sensor
 
@@ -547,7 +601,7 @@ void f_sfunction_ds18b20(struct td_sensors *td)
 
       if ((devs_one == 0) || (devs_two == 0))   // no DS18B20 devices detected
       {
-        snprintf(err, BUF_LEN_ERR,
+        snprintf(err, BUF_LEN_LINE,
                  "%s{event=\"fault\",f=\"f_sfunction_ds18b20\","
                  "reason=\"empty,d1:%d,d2:%d\",pin=\"%d\",attempt=\"%d\"} 1",
                  td->thread_name, devs_one, devs_two, data_pin, attempt) ;
@@ -559,7 +613,7 @@ void f_sfunction_ds18b20(struct td_sensors *td)
         all_good = 0 ;
         if (G_runtime->config.debug)
           Serial.printf("DEBUG: f_sfunction_ds18b20() devs mismatch\r\n") ;
-        snprintf(err, BUF_LEN_ERR,
+        snprintf(err, BUF_LEN_LINE,
                  "%s{event=\"fault\",f=\"f_sfunction_ds18b20\","
                  "reason=\"count_mismatch,d1:%d,d2:%d\","
                  "pin=\"%d\",attempt=\"%d\"} 1",
@@ -575,7 +629,7 @@ void f_sfunction_ds18b20(struct td_sensors *td)
             all_good = 0 ;
             if (G_runtime->config.debug)
               Serial.printf("DEBUG: f_sfunction_ds18b20() large delta\r\n") ;
-            snprintf(err, BUF_LEN_ERR,
+            snprintf(err, BUF_LEN_LINE,
                      "%s{event=\"fault\",f=\"f_sfunction_ds18b20\","
                      "reason\"large_delta,i:%d,%.3f->%.3f\","
                      "pin=\"%d\",attempt=\"%d\"} 1",
@@ -615,7 +669,7 @@ void f_sfunction_ds18b20(struct td_sensors *td)
   // forward. Note each hex address string needs 18 bytes (including NULL).
 
   S_ThreadResult *res = G_runtime->utask[td->t_idx].result ;
-  if (td->cur_result + total_devs >= td->total_results)
+  if (td->cur_result + total_devs > td->total_results)
   {
     int total_buf_size = 18 * total_devs ;
     char *addr_hex = td->label_base[td->cur_function + 1] ; // next free area
@@ -623,8 +677,6 @@ void f_sfunction_ds18b20(struct td_sensors *td)
 
     for (int dev_idx=0 ; dev_idx < total_devs ; dev_idx++)
     {
-      char *p, *token ;
-
       // parse our "label_base[]" entry for the first result only. For all
       // subsequent results, copy the "l_name" and "l_data" entries from the
       // first result until we hit "address" for "l_name".
@@ -638,14 +690,21 @@ void f_sfunction_ds18b20(struct td_sensors *td)
         label_idx = f_sensor_copy_labels_until(td, first_idx, "address") ;
       }
 
-      // the last label is the "address", record down its "l_data" buffer.
+      // the last label is the "address", record down its "l_data" buffer. note
+      // we're just assigning a buffer, the actual hex string comes later.
 
       res[td->cur_result].l_name[label_idx] = "address" ;
       res[td->cur_result].l_data[label_idx] = addr_hex ;
 
-      addr_hex = addr_hex + 18 ;
       td->cur_result++ ;
       td->total_results++ ; // this indicates the result has been initialized
+      snprintf(err, BUF_LEN_LINE,
+             "%s{event=\"notice\",f=\"f_sfunction_ds18b20\","
+             "reason=\"add_result\",pin=\"%d\",idx=\"%d\",result=\"%d/%d\"} 1",
+             td->thread_name,
+             data_pin, dev_idx, td->cur_result, td->total_results) ;
+      f_mqtt_publish(-1, err) ;
+      addr_hex = addr_hex + 18 ;
     }
 
     // we're done initializing result labels. Move "cur_result" backwards
@@ -914,8 +973,8 @@ void ft_sensors(S_UserThread *self)
       Serial.printf("DEBUG: ft_sensors() cur_result:%d total_results:%d\r\n",
                     td->cur_result, td->total_results) ;
 
-    char err[BUF_LEN_ERR] ;
-    snprintf(err, BUF_LEN_ERR,
+    char err[BUF_LEN_LINE] ;
+    snprintf(err, BUF_LEN_LINE,
              "%s{event=\"fault\",f=\"ft_sensors\","
              "reason=\"result_mismatch:%d->%d,prev:%d\"} 1",
              td->thread_name,
