@@ -434,6 +434,15 @@ void f_sfunction_dht22(struct td_sensors *td)
     for (int attempt=0 ; attempt < DHT22_MAX_RETRIES ; attempt++)
     {
       all_good = f_sensor_dht22(data_pin, &t1, &h1, err) ;
+      if (all_good == 0)
+      {
+        snprintf(err, BUF_LEN_ERR,
+                 "%s{event=\"fault\",f=\"f_sfunction_dht22\","
+                 "reason=\"empty_poll1\",pin=\"%d\",attempt=\"%d\"} 1",
+                 td->thread_name, data_pin, attempt) ;
+        f_mqtt_publish(-1, err) ;
+      }
+
       delay(DHT22_POLL_DELAY_MS) ;
       if (all_good)                             // proceed with 2nd reading
       {
@@ -460,6 +469,14 @@ void f_sfunction_dht22(struct td_sensors *td)
                      td->thread_name, data_pin, attempt) ;
             f_mqtt_publish(-1, err) ;
           }
+        }
+        else
+        {
+          snprintf(err, BUF_LEN_ERR,
+                   "%s{event=\"fault\",f=\"f_sfunction_dht22\","
+                   "reason=\"empty_poll2\",pin=\"%d\",attempt=\"%d\"} 1",
+                   td->thread_name, data_pin, attempt) ;
+          f_mqtt_publish(-1, err) ;
         }
       }
       else
@@ -506,6 +523,7 @@ void f_sfunction_ds18b20(struct td_sensors *td)
 
   int label_idx=0, total_devs=0 ;
   int data_pin = atoi(td->cur_d) ;
+  char err[BUF_LEN_ERR] ;
   float temperatures[DS18B20_MAX_PER_BUS] ;
   unsigned char addrs[DS18B20_MAX_PER_BUS * 8] ;  // 8 bytes per sensor
 
@@ -527,11 +545,26 @@ void f_sfunction_ds18b20(struct td_sensors *td)
       delay(DS18B20_POLL_DELAY) ;
       devs_two = f_sensor_ds18b20(data_pin, t_two, addrs) ;
 
+      if ((devs_one == 0) || (devs_two == 0))   // no DS18B20 devices detected
+      {
+        snprintf(err, BUF_LEN_ERR,
+                 "%s{event=\"fault\",f=\"f_sfunction_ds18b20\","
+                 "reason=\"empty,d1:%d,d2:%d\",pin=\"%d\",attempt=\"%d\"} 1",
+                 td->thread_name, devs_one, devs_two, data_pin, attempt) ;
+        f_mqtt_publish(-1, err) ;
+      }
+
       if (devs_one != devs_two)
       {
         all_good = 0 ;
         if (G_runtime->config.debug)
           Serial.printf("DEBUG: f_sfunction_ds18b20() devs mismatch\r\n") ;
+        snprintf(err, BUF_LEN_ERR,
+                 "%s{event=\"fault\",f=\"f_sfunction_ds18b20\","
+                 "reason=\"count_mismatch,d1:%d,d2:%d\","
+                 "pin=\"%d\",attempt=\"%d\"} 1",
+                 td->thread_name, devs_one, devs_two, data_pin, attempt) ;
+        f_mqtt_publish(-1, err) ;
       }
       else
       {
@@ -542,6 +575,13 @@ void f_sfunction_ds18b20(struct td_sensors *td)
             all_good = 0 ;
             if (G_runtime->config.debug)
               Serial.printf("DEBUG: f_sfunction_ds18b20() large delta\r\n") ;
+            snprintf(err, BUF_LEN_ERR,
+                     "%s{event=\"fault\",f=\"f_sfunction_ds18b20\","
+                     "reason\"large_delta,i:%d,%.3f->%.3f\","
+                     "pin=\"%d\",attempt=\"%d\"} 1",
+                     td->thread_name, i, t_one[i], t_two[i],
+                     data_pin, attempt) ;
+            f_mqtt_publish(-1, err) ;
           }
       }
 
@@ -874,9 +914,17 @@ void ft_sensors(S_UserThread *self)
       Serial.printf("DEBUG: ft_sensors() cur_result:%d total_results:%d\r\n",
                     td->cur_result, td->total_results) ;
 
+    char err[BUF_LEN_ERR] ;
+    snprintf(err, BUF_LEN_ERR,
+             "%s{event=\"fault\",f=\"ft_sensors\","
+             "reason=\"result_mismatch:%d->%d,prev:%d\"} 1",
+             td->thread_name,
+             td->cur_result, td->total_results, td->prev_results) ;
+    f_mqtt_publish(-1, err) ;
+
     int retries = 0 ;
     if (self->num_args == 3)
-      retries = atoi(self->in_args[2]) ;
+      retries = atoi(self->in_args[2]) ; // pass in "retries" if specified
     f_init_thread_data(td, self, retries) ;
   }
   else
