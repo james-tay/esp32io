@@ -201,6 +201,39 @@ void f_ps_cmd(int idx)
 }
 
 /*
+   This function is called from "f_action()", our job is to try setting the
+   cpu frequency specified by the user.
+*/
+
+void f_cpufreq_cmd(int idx)
+{
+  char *tokens[2], *freq=NULL ;
+  int count = f_parse(G_runtime->worker[idx].cmd, tokens, 2) ;
+  if (count != 2)
+  {
+    strncpy(G_runtime->worker[idx].result_msg, "No frequency specified.\r\n",
+            BUF_LEN_WORKER_RESULT) ;
+    G_runtime->worker[idx].result_code = 400 ;
+    return ;
+  }
+  freq = tokens[1] ;
+  if (setCpuFrequencyMhz(atoi(freq)))
+  {
+    snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+             "CPU frequency set to %d Mhz.\r\n", atoi(freq)) ;
+    G_runtime->worker[idx].result_code = 200 ;
+  }
+  else
+  {
+    unsigned char x_freq = getXtalFrequencyMhz() ;
+    snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
+             "Unsupported frequency, try %s.\r\n",
+             getSupportedCpuFrequencyMhz(x_freq)) ;
+    G_runtime->worker[idx].result_code = 500 ;
+  }
+}
+
+/*
    This function is called from "f_action()", our job is to print our current
    uptime.
 */
@@ -222,7 +255,9 @@ void f_uptime_cmd(int idx)
   }
 
   snprintf(G_runtime->worker[idx].result_msg, BUF_LEN_WORKER_RESULT,
-           "uptime %lld secs, %s\r\n", esp_timer_get_time() / 1000000, line) ;
+           "uptime %lld secs, cpu:%dMHz xtal:%dMHz, %s\r\n",
+           esp_timer_get_time() / 1000000,
+           getCpuFrequencyMhz(), getXtalFrequencyMhz(), line) ;
   G_runtime->worker[idx].result_code = 200 ;
 }
 
@@ -292,6 +327,7 @@ void f_action(int idx)
     strncpy(G_runtime->worker[idx].result_msg,
       "aread <pin>      analog read\r\n"
       "cam ...          camera management\r\n"
+      "cpufreq <mhz>    set cpu speed (240, 160, 80, 40)\r\n"
       "dht22 <pin>      poll temperature and humidity\r\n"
       "dread <pin>      digital read\r\n"
       "ds18b20 <pin>    poll temperature sensor(s)\r\n"
@@ -321,6 +357,9 @@ void f_action(int idx)
   else
   if (strcmp(keyword, "cam") == 0)                              // cam
     f_cam_cmd(idx) ;
+  else
+  if (strcmp(keyword, "cpufreq") == 0)                          // cpufreq
+    f_cpufreq_cmd(idx) ;
   else
   if (strcmp(keyword, "/cam") == 0)                             // webclient
     f_process_camera(idx) ;

@@ -166,7 +166,8 @@ void ft_dht22(S_UserThread *self)
 
       if ((self->loop > 0) &&
           (fabsf(self->result[0].f_value - cur_temp) < DHT22_MAX_T_DELTA) &&
-          (fabsf(self->result[1].f_value - cur_humidity) < DHT22_MAX_H_DELTA))
+          (fabsf(self->result[1].f_value - cur_humidity) < DHT22_MAX_H_DELTA) &&
+          (cur_humidity <= 100.0))
       {
         self->result[0].f_value = cur_temp ;
         self->result[1].f_value = cur_humidity ;
@@ -179,7 +180,8 @@ void ft_dht22(S_UserThread *self)
         delay(DHT22_POLL_DELAY_MS) ;
         if ((f_sensor_dht22(dataPin, &cur_temp, &cur_humidity, err)) &&
             (prev_temp - cur_temp < DHT22_MAX_T_DELTA) &&
-            (prev_humidity - cur_humidity < DHT22_MAX_H_DELTA))
+            (prev_humidity - cur_humidity < DHT22_MAX_H_DELTA) &&
+            (cur_humidity <= 100.0))
         {
           self->result[0].f_value = cur_temp ;
           self->result[1].f_value = cur_humidity ;
@@ -187,7 +189,7 @@ void ft_dht22(S_UserThread *self)
         }
         else
         {
-          self->result[2].i_value++ ;
+          self->result[2].i_value++ ;                   // anomaly
           if ((G_runtime->config.debug) && (strlen(err) > 0))
             Serial.printf("DEBUG: ft_dht22() err:%s\r\n", err) ;
         }

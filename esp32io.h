@@ -19,6 +19,7 @@
 #include "esp_vfs_dev.h"
 #include "esp_chip_info.h"
 #include "esp_netif_sntp.h"
+#include "esp32-hal-cpu.h"
 #include "driver/uart.h"
 
 // general defines
