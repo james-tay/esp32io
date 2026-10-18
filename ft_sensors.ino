@@ -739,10 +739,10 @@ void f_sfunction_ds18b20(struct td_sensors *td)
    This function is called from "ft_sensors()". Our job is to process the
    supplied "cur_cmd". This involves parsing it into semi-colon separated
    tokens and then deciding what to do with them. Thus, our job is to populate
-   the "c", "f", "d" and "l" pointers.
+   the "c", "f", "d" and "l" pointers. On success, we return 0, otherwise -1.
 */
 
-void f_sensors_cmd(struct td_sensors *td, char *cur_cmd)
+int f_sensors_cmd(struct td_sensors *td, char *cur_cmd)
 {
   char *token, *p ;
   char *c=NULL, *f=NULL, *d=NULL, *l=NULL ;     // user supplied params
@@ -812,6 +812,8 @@ void f_sensors_cmd(struct td_sensors *td, char *cur_cmd)
     {
       td->num_functions++ ;
       int fn_idx = td->cur_function ;
+      if (l == NULL)                            // no label, this is a fault
+        return (-1) ;
       memcpy(td->label_base[fn_idx], l, strlen(l)) ;
       td->label_base[fn_idx + 1] = td->label_base[fn_idx] + strlen(l) + 1 ;
     }
@@ -836,6 +838,8 @@ void f_sensors_cmd(struct td_sensors *td, char *cur_cmd)
     if (strcmp(f, "f_sensor_ds18b20") == 0)             // DS18B20
       f_sfunction_ds18b20(td) ;
   }
+
+  return (0) ;
 }
 
 /*
@@ -949,7 +953,13 @@ void ft_sensors(S_UserThread *self)
       *end = 0 ;
       end-- ;
     }
-    f_sensors_cmd(td, cur_cmd) ;                        // run user statement
+    if (f_sensors_cmd(td, cur_cmd) < 0)                 // run user statement
+    {
+      snprintf(self->status, BUF_LEN_UTHREAD_STATUS,
+               "Fault on function %d", td->cur_function) ;
+      self->state = UTHREAD_STOPPED ;
+      return ;
+    }
     if (td->cur_function == DEF_MAX_THREAD_RESULTS)     // too many functions
     {
       strncpy(self->status, "Too many functions", BUF_LEN_UTHREAD_STATUS) ;
