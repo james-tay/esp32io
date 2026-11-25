@@ -115,10 +115,11 @@
 #define DS18B20_MAX_PER_BUS 8           // maximum sensors per GPIO pin
 #define DS18B20_POLL_DELAY 800          // based on datasheet page 1
 #define DS18B20_POWER_ON_DELAY_MS 20    // wait for voltage to stabilize
+#define DS18B20_RETRY_DELAY_MS 250      // power cycle duration
 #define DS18B20_TEMP_MAX 125.0          // maximum valid temperature reading
 #define DS18B20_TEMP_MIN -55.0          // minimum valid temperature reading
-#define DS18B20_MAX_DELTA 5.0           // max temperature swing between polls
-#define DS18B20_MAX_RETRIES 3           // repeat if temperature swing is large
+#define DS18B20_MAX_DELTA 3.0           // max temperature swing between polls
+#define DS18B20_MAX_RETRIES 6           // repeat if temperature swing is large
 
 #define DHT22_TIMEOUT_USEC 500          // expected pulseIn response time
 #define DHT22_MAX_T_DELTA 5.0           // max temperature swing between polls

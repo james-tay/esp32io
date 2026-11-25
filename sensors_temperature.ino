@@ -287,7 +287,7 @@ int f_sensor_ds18b20(int pin, float *t_values, unsigned char *addrs)
       t_values[idx] = cur ;
     else
     {
-      t_values[idx] = 0.0 ;
+      t_values[idx] = (float) (DS18B20_TEMP_MIN - 1) ; // temperature invalid
       addr_ptr[0] = 0 ;                 // make device's address invalid
       if (G_runtime->config.debug)
         Serial.printf("DEBUG: Invalid temperature %f from sensor%d.\r\n",
@@ -422,6 +422,12 @@ void ft_ds18b20(S_UserThread *self)
   retries = DS18B20_MAX_RETRIES ;               // do several temperature polls
   while (retries > 0)
   {
+    // initialize "temperatures[]" to invalid values so we know if an array
+    // element was never written to.
+
+    for (int i=0 ; i < DS18B20_MAX_PER_BUS ; i++)
+      temperatures[i] = (float) (DS18B20_TEMP_MIN - 1) ;
+
     total = f_sensor_ds18b20(td->dataPin, temperatures, addrs) ;
     if (total > td->total_sensors)
       td->total_sensors = total ;
@@ -439,12 +445,32 @@ void ft_ds18b20(S_UserThread *self)
         if ((retries < DS18B20_MAX_RETRIES) &&
             (fabsf(previous[i] - temperatures[i]) > DS18B20_MAX_DELTA))
           total = 0 ;                                   // mark readings as bad
+
+        // if we're not in our first loop, compare against previous results if
+        // valid.
+
+        if ((self->loop > 1) &&
+            (self->result[i+1].result_type == UTHREAD_RESULT_FLOAT) &&
+            (fabsf(temperatures[i] - self->result[i+1].f_value)
+             > DS18B20_MAX_DELTA))
+          total = 0 ;
+
         previous[i] = temperatures[i] ;
       }
       if ((retries < DS18B20_MAX_RETRIES) && (total == td->total_sensors))
         break ;                                         // all readings good !!
     }
     retries-- ;
+
+    // reboot sensors by power cycling them
+
+    if (td->pwrPin >= 0)
+    {
+      digitalWrite(td->pwrPin, LOW) ;
+      delay(DS18B20_RETRY_DELAY_MS) ;   // hold Vcc low for a long time
+      digitalWrite(td->pwrPin, HIGH) ;
+      delay(DS18B20_RETRY_DELAY_MS) ;   // wait a long time before retrying
+    }
   }
 
   for (int i=0 ; i < total ; i++)
@@ -468,7 +494,13 @@ void ft_ds18b20(S_UserThread *self)
       self->result[i+1].l_name[0] = "address" ;
       self->result[i+1].l_data[0] = addr_ptr ;
       self->result[i+1].f_value = temperatures[i] ;
-      self->result[i+1].result_type = UTHREAD_RESULT_FLOAT ;
+
+      // if temperature value is invalid, don't expose this result
+
+      if (temperatures[i] < (float) DS18B20_TEMP_MIN)
+        self->result[i+1].result_type = UTHREAD_RESULT_NONE ;
+      else
+        self->result[i+1].result_type = UTHREAD_RESULT_FLOAT ;
     }
   }
 
