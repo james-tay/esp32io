@@ -258,3 +258,17 @@ sensor_door{model="magnetic",location="backyard-gate",type="transients"} 0
 sensor_door{model="magnetic",location="backyard-gate",type="triggers"} 4
 ```
 
+## Other Notes
+
+- There is a bug in the OneWire v2.3.8 which results in DS18B20 sensors not
+  working on ESP32-S3 units with "high" GPIO pin numbers (eg `GPIO41`). Edit
+  `$HOME/Arduino/libraries/OneWire/util/OneWire_direct_gpio.h`,
+  replace the line,
+  ```
+  if ( digitalPinIsValid(pin) && pin <= 33 ) // pins above 33 can be only inputs
+  ```
+  with
+  ```
+  if ( digitalPinIsValid(pin) )
+  ```
+
